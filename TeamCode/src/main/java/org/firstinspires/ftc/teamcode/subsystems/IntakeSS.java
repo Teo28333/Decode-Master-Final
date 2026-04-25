@@ -38,7 +38,7 @@ public class IntakeSS {
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private static final double ZONE_DIAGONAL    = 10 * Math.sqrt(2);
-    private static final double LED_IDLE         = 0.3;
+    private static final double LED_IDLE         = 0.8;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public IntakeSS(HardwareMap hwm, Telemetry telemetry,
@@ -115,7 +115,6 @@ public class IntakeSS {
 
         // LED feedback
         if      (motor1Stopped) ledColor = 0.50;
-        else if (motor2Stopped) ledColor = 0.65;
         else                    ledColor = LED_IDLE;
     }
 

@@ -14,9 +14,9 @@ import org.firstinspires.ftc.teamcode.math.ShooterEquation;
 public class TurretSS {
 
     // ── Hardware ──────────────────────────────────────────────────────────────
-    private final ServoImplEx    servo1;
-    private final ServoImplEx    servo2;
-    private final Telemetry      telemetry;
+    private final ServoImplEx     servo1;
+    private final ServoImplEx     servo2;
+    private final Telemetry       telemetry;
     private final ShooterEquation airTime = new ShooterEquation();
 
     // ── Outputs ───────────────────────────────────────────────────────────────
@@ -24,7 +24,13 @@ public class TurretSS {
 
     // ── State ─────────────────────────────────────────────────────────────────
     private double  targetAngleRad       = 0.0; // absolute field-relative angle
-    private double  actualTargetAngleRad = 0.0; // robot-relative angle
+    private double  actualTargetAngleRad = 0.0; // robot-relative angle (CCW+, front=±180°)
+    private double  robotHeadingRad      = 0.0; // stored for telemetry
+    private double  turretFieldX         = 0.0; // actual turret pivot position on field
+    private double  turretFieldY         = 0.0;
+    private double  filteredVelX         = 0.0; // low-pass filtered linear velocity
+    private double  filteredVelY         = 0.0;
+    private double  filteredHeadingVel   = 0.0; // low-pass filtered angular velocity
     private boolean robotNeedToTurn      = false;
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -59,23 +65,68 @@ public class TurretSS {
     public void telemetry() {
         telemetry.addData("Turret target (deg, field)", Math.toDegrees(targetAngleRad));
         telemetry.addData("Turret target (deg, robot)", Math.toDegrees(actualTargetAngleRad));
+        telemetry.addData("Robot heading (deg)",        Math.toDegrees(robotHeadingRad));
+        telemetry.addData("Heading vel (deg/s)",        Math.toDegrees(filteredHeadingVel));
+        telemetry.addData("Turret field pos",           "(" + turretFieldX + ", " + turretFieldY + ")");
+        telemetry.addData("Filtered vel",               "(" + filteredVelX + ", " + filteredVelY + ")");
         telemetry.addData("Turret servo pos",           servoPos);
         telemetry.addData("Robot needs to turn",        robotNeedToTurn);
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
-    public void aimAtTargetCMD(double robotX, double robotY, double robotHeading,
-                            Vector robotVel, double goalX, double goalY) {
-        // Compensate goal position for robot velocity × ball air time
-        double distance = Math.hypot(goalX - robotX, goalY - robotY);
-        double dt       = airTime.getAirTime(distance);
-        double adjGoalX = goalX - robotVel.getXComponent() * dt;
-        double adjGoalY = goalY - robotVel.getYComponent() * dt;
 
-        targetAngleRad       = Math.atan2(adjGoalY - robotY, adjGoalX - robotX);
-        actualTargetAngleRad = targetAngleRad + robotHeading;
+    /**
+     * @param robotX           robot X position (inches)
+     * @param robotY           robot Y position (inches)
+     * @param robotHeading     robot heading (radians, CCW+)
+     * @param robotVel         robot linear velocity vector (inches/s)
+     * @param robotHeadingVel  robot angular velocity (radians/s, CCW+) — from Pedro
+     * @param goalX            goal X position (inches)
+     * @param goalY            goal Y position (inches)
+     */
+    public void aimAtTargetCMD(double robotX,         double robotY,
+                               double robotHeading,   Vector robotVel,
+                               double robotHeadingVel,
+                               double goalX,          double goalY) {
+        robotHeadingRad = robotHeading;
 
-        double targetDeg = Math.toDegrees(actualTargetAngleRad);
+        // ── Angular velocity filter ───────────────────────────────────────────
+        filteredHeadingVel = HEADING_VEL_FILTER_ALPHA * filteredHeadingVel
+                + (1.0 - HEADING_VEL_FILTER_ALPHA) * robotHeadingVel;
+
+        // ── Linear velocity filter ────────────────────────────────────────────
+        filteredVelX = VELOCITY_FILTER_ALPHA * filteredVelX
+                + (1.0 - VELOCITY_FILTER_ALPHA) * robotVel.getXComponent();
+        filteredVelY = VELOCITY_FILTER_ALPHA * filteredVelY
+                + (1.0 - VELOCITY_FILTER_ALPHA) * robotVel.getYComponent();
+
+        // ── Turret pivot position on field ────────────────────────────────────
+        turretFieldX = robotX + TURRET_OFFSET_X * Math.cos(robotHeading)
+                - TURRET_OFFSET_Y * Math.sin(robotHeading);
+        turretFieldY = robotY + TURRET_OFFSET_X * Math.sin(robotHeading)
+                + TURRET_OFFSET_Y * Math.cos(robotHeading);
+
+        // ── Shoot-on-the-move goal compensation (linear velocity) ─────────────
+        double distance = Math.hypot(goalX - turretFieldX, goalY - turretFieldY);
+        double airtime  = airTime.getAirTime(distance);
+        double adjGoalX = goalX - filteredVelX * airtime;
+        double adjGoalY = goalY - filteredVelY * airtime;
+
+        // ── Field-relative angle from turret pivot to goal ────────────────────
+        targetAngleRad = Math.atan2(adjGoalY - turretFieldY, adjGoalX - turretFieldX);
+
+        // ── Convert to robot-relative with heading prediction ─────────────────
+        // Lead the heading by lookahead × angular velocity to compensate
+        // for the turret servo being slower than the robot rotation speed
+        double predictedHeading = robotHeading
+                + filteredHeadingVel * HEADING_VEL_LOOKAHEAD_SEC;
+
+        actualTargetAngleRad = normalizeAngle(
+                targetAngleRad - predictedHeading + Math.PI
+        );
+
+        // ── Servo output (CW+, so negate CCW+ math angle) ─────────────────────
+        double targetDeg = -Math.toDegrees(actualTargetAngleRad);
         servoPos         = angleDegToServoPos(targetDeg);
         robotNeedToTurn  = Math.abs(targetDeg) > maxSafeAngleDeg;
     }
@@ -85,9 +136,20 @@ public class TurretSS {
         return robotNeedToTurn;
     }
 
+    /** Robot-relative angle to goal in degrees (CCW+). Used by Robot to determine turn direction. */
+    public double getTurretAngleDeg() {
+        return Math.toDegrees(actualTargetAngleRad);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     private double angleDegToServoPos(double angleDeg) {
         double pos = (angleDeg - minAngleDeg) / (maxAngleDeg - minAngleDeg);
         return Range.clip(pos, 0.0, 1.0);
+    }
+
+    private static double normalizeAngle(double rad) {
+        while (rad >  Math.PI) rad -= 2 * Math.PI;
+        while (rad < -Math.PI) rad += 2 * Math.PI;
+        return rad;
     }
 }

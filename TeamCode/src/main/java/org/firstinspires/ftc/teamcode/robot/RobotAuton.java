@@ -4,6 +4,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.math.Vector;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.commands.IntakeCommands;
@@ -20,33 +21,45 @@ public class RobotAuton {
     public final IntakeSS  intake;
     public final ShooterSS shooter;
     public final TurretSS  turret;
-    private final PtoSS    pto; // private — no lift access in auton
+    private final PtoSS    pto;
 
     // ── Commands ──────────────────────────────────────────────────────────────
     public final IntakeCommands intakeCommands;
-    // LiftCommands intentionally absent — lift is locked out in auton
 
     // ── Alliance ──────────────────────────────────────────────────────────────
-    private final boolean isRedAlliance;
+    private final boolean isBlueAlliance;
 
     private static final double HEADING_RED  = 0.0;
     private static final double HEADING_BLUE = Math.PI;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 12.0;
-    private static final double GOAL_Y_RED  = 120.0;
-    private static final double GOAL_X_BLUE = 132.0;
-    private static final double GOAL_Y_BLUE = 120.0;
+    private static final double GOAL_X_RED  = 142.0;
+    private static final double GOAL_Y_RED  = 144.0;
+    private static final double GOAL_X_BLUE = 2.0;
+    private static final double GOAL_Y_BLUE = 144.0;
 
     public final double goalX;
     public final double goalY;
 
-    // ── Constructor ───────────────────────────────────────────────────────────
-    public RobotAuton(HardwareMap hwm, Telemetry telemetry, boolean isRedAlliance) {
-        this.isRedAlliance = isRedAlliance;
+    // ── State ─────────────────────────────────────────────────────────────────
+    private State currentState = State.IDLE;
 
-        goalX = isRedAlliance ? GOAL_X_RED  : GOAL_X_BLUE;
-        goalY = isRedAlliance ? GOAL_Y_RED  : GOAL_Y_BLUE;
+    private enum State {
+        IDLE,
+        INTAKING,
+        TRANSFERRING
+    }
+
+    // ── Timed action ──────────────────────────────────────────────────────────
+    private final ElapsedTime actionTimer  = new ElapsedTime();
+    private double             actionTimeoutMs = 0.0;
+
+    // ── Constructor ───────────────────────────────────────────────────────────
+    public RobotAuton(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance) {
+        this.isBlueAlliance = isBlueAlliance;
+
+        goalX = isBlueAlliance ? GOAL_X_BLUE : GOAL_X_RED;
+        goalY = isBlueAlliance ? GOAL_Y_BLUE : GOAL_Y_RED;
 
         follower = Constants.createFollower(hwm);
 
@@ -58,7 +71,7 @@ public class RobotAuton {
 
         intakeCommands = new IntakeCommands(intake);
 
-        // Force PTO disengaged immediately at startup
+        // Safety: force PTO disengaged at startup
         pto.disengagePtoCMD();
         pto.write();
     }
@@ -69,6 +82,11 @@ public class RobotAuton {
     }
 
     // ── Main auton loop ───────────────────────────────────────────────────────
+
+    /**
+     * Call every loop unconditionally — handles all subsystems, state machine,
+     * and command updates regardless of whether isBusy() is true or false.
+     */
     public void update() {
         follower.update();
 
@@ -83,24 +101,80 @@ public class RobotAuton {
         Vector robotVel = follower.getVelocity();
 
         // ── Turret & shooter (automatic) ──────────────────────────────────────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, goalX, goalY);
+        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(), goalX, goalY);
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
 
-        // ── Command updates ───────────────────────────────────────────────────
+        // ── State machine — runs every loop, transitions to IDLE when done ────
+        switch (currentState) {
+            case INTAKING:
+                if (actionTimer.milliseconds() >= actionTimeoutMs) {
+                    intakeCommands.idle();
+                    currentState = State.IDLE;
+                }
+                break;
+
+            case TRANSFERRING:
+                boolean transferComplete = !intakeCommands.isTransferring();
+                boolean timedOut        = actionTimer.milliseconds() >= actionTimeoutMs;
+
+                if (transferComplete || timedOut) {
+                    intakeCommands.idle();
+                    currentState = State.IDLE;
+                }
+                break;
+
+            case IDLE:
+            default:
+                break;
+        }
+
+        // ── Command & subsystem updates — always run ──────────────────────────
         intakeCommands.update(
                 robotX, robotY,
                 shooter.isReady(),
                 !turret.robotNeedToTurn()
         );
 
-        // ── Subsystem updates ─────────────────────────────────────────────────
         intake.update();
         shooter.update();
         turret.update();
-        pto.update(); // pushes disengagedPos set above
+        pto.update();
+    }
+
+    // ── Timed action commands ─────────────────────────────────────────────────
+
+    /**
+     * Start intaking for up to timeoutMs milliseconds.
+     * Robot stays busy until timeout expires.
+     */
+    public void intakeFor(double timeoutMs) {
+        intakeCommands.intake();
+        actionTimeoutMs = timeoutMs;
+        currentState    = State.INTAKING;
+        actionTimer.reset();
+    }
+
+    /**
+     * Start transferring for up to timeoutMs milliseconds.
+     * Robot stays busy until transfer completes or timeout expires.
+     */
+    public void transferFor(double timeoutMs) {
+        intakeCommands.transfer();
+        actionTimeoutMs = timeoutMs;
+        currentState    = State.TRANSFERRING;
+        actionTimer.reset();
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
-    public Follower getFollower()   { return follower;      }
-    public boolean  isRedAlliance() { return isRedAlliance; }
+
+    /**
+     * Returns true while an action is running.
+     * Always call update() every loop regardless of isBusy().
+     */
+    public boolean isBusy() {
+        return currentState != State.IDLE;
+    }
+
+    public Follower getFollower()    { return follower;       }
+    public boolean  isBlueAlliance() { return isBlueAlliance; }
 }

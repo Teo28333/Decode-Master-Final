@@ -40,6 +40,10 @@ public class Robot {
     private static final double GOAL_X_BLUE = 2.0;
     private static final double GOAL_Y_BLUE = 144.0;
 
+    // ── Auto-rotate tuning ────────────────────────────────────────────────────
+    // How fast the robot rotates to face the goal during transfer (0.0 - 1.0)
+    private static final double TURN_CORRECTION_POWER = 0.4;
+
     private final double goalX;
     private final double goalY;
 
@@ -52,7 +56,7 @@ public class Robot {
     // ── Constructor ───────────────────────────────────────────────────────────
     public Robot(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance, boolean tuning) {
         this.isBlueAlliance = isBlueAlliance;
-        this.isInTuning = tuning;
+        this.isInTuning     = tuning;
 
         goalX = isBlueAlliance ? GOAL_X_BLUE : GOAL_X_RED;
         goalY = isBlueAlliance ? GOAL_Y_BLUE : GOAL_Y_RED;
@@ -83,28 +87,39 @@ public class Robot {
     public void update(Gamepad gamepad1) {
 
         shooter.setTuningMode(isInTuning);
-        // ── Driving ───────────────────────────────────────────────────────────
-        double headingOffset = isBlueAlliance ? HEADING_BLUE : HEADING_RED;
 
-        follower.setTeleOpDrive(
-                -gamepad1.left_stick_y,
-                gamepad1.left_stick_x,
-                gamepad1.right_stick_x,
-                false,
-                Math.toRadians(headingOffset)
-        );
-        follower.update();
-
-        // ── Pose & velocity ───────────────────────────────────────────────────
-        Pose pose = follower.getPose();
+        // ── Pose & velocity (needed before driving block) ─────────────────────
+        Pose   pose     = follower.getPose();
         double robotX   = pose.getX();
         double robotY   = pose.getY();
         double heading  = pose.getHeading();
         Vector robotVel = follower.getVelocity();
 
-        // ── Turret & shooter (automatic) ──────────────────────────────────────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, goalX, goalY);
+        // ── Turret & shooter (before driving so robotNeedToTurn is fresh) ──────
+        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(), goalX, goalY);
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
+
+        // ── Driving ───────────────────────────────────────────────────────────
+        double headingOffset = isBlueAlliance ? HEADING_BLUE : HEADING_RED;
+
+        // During transfer, if the robot needs to turn to face the goal,
+        // override the driver's rotation input with an auto-correction
+        double turnInput = -gamepad1.right_stick_x;
+        if (intakeCommands.isTransferring() && turret.robotNeedToTurn()) {
+            // Determine turn direction from the turret's robot-relative angle:
+            // positive angle → goal is to the left → turn CCW (positive turn)
+            // negative angle → goal is to the right → turn CW (negative turn)
+            turnInput = Math.copySign(TURN_CORRECTION_POWER, turret.getTurretAngleDeg());
+        }
+
+        follower.setTeleOpDrive(
+                -gamepad1.left_stick_y,
+                -gamepad1.left_stick_x,
+                turnInput,
+                false,
+                Math.toRadians(headingOffset)
+        );
+        follower.update();
 
         // ── Edge detection for toggle buttons ─────────────────────────────────
         boolean intakePressed    = gamepad1.right_bumper && !lastIntake;
@@ -124,7 +139,7 @@ public class Robot {
             intakeCommands.idle();
         }
 
-        // ── Transfer (active while X held) ────────────────────────────────────
+        // ── Transfer (active while left bumper held) ───────────────────────────
         if (gamepad1.x) {
             if (!intakeCommands.isTransferring()) intakeCommands.transfer();
         } else if (intakeCommands.isTransferring()) {

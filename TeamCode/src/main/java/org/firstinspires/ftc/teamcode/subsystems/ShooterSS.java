@@ -23,17 +23,18 @@ public class ShooterSS {
     private final Servo           hood;
     private final ServoImplEx     led;
     private final Telemetry       telemetry;
-    private final ShooterEquation shooterEquation  = new ShooterEquation();
+    private final ShooterEquation shooterEquation = new ShooterEquation();
     private final PIDFSController pidfsController;
 
     // ── Outputs ───────────────────────────────────────────────────────────────
-    private double motorPow  = 0.0;
-    private double hoodPos   = 0.0;
-    private double ledColor  = 0.0;
+    private double motorPow = 0.0;
+    private double hoodPos  = 0.0;
+    private double ledColor = 0.0;
 
     // ── Sensor readings ───────────────────────────────────────────────────────
-    private double currentVelRPM = 0.0;
-    private double targetRPM     = 0.0;
+    private double currentVelRPM  = 0.0;
+    private double targetRPM      = 0.0;
+    private double currentDistance = 0.0;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private boolean tuningMode = false;
@@ -83,6 +84,7 @@ public class ShooterSS {
         telemetry.addData("Shooter error (RPM)",   targetRPM - currentVelRPM);
         telemetry.addData("Shooter power",         motorPow);
         telemetry.addData("Hood position",         hoodPos);
+        telemetry.addData("Distance (in)",         currentDistance);
         telemetry.addData("At target",             atTarget());
         telemetry.addData("Tuning mode",           tuningMode);
     }
@@ -97,12 +99,12 @@ public class ShooterSS {
         double adjGoalY    = goalY - robotVel.getYComponent() * dt;
         double adjDistance = Math.hypot(adjGoalX - robotX, adjGoalY - robotY);
 
+        currentDistance = adjDistance;
+
         targetRPM = tuningMode ? tuningRPM     : shooterEquation.getTargetRPM(adjDistance);
         hoodPos   = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
         motorPow  = pidfsController.calculate(targetRPM, currentVelRPM);
         ledColor  = atTarget() ? 0.5 : 0.39;
-
-        hood.setPosition(hoodPos);
     }
 
     public void setTuningMode(boolean enabled) {
@@ -110,16 +112,16 @@ public class ShooterSS {
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
-    private boolean atTarget() {
-        return currentVelRPM > targetRPM - RPM_THRESHOLD
-                && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;
-    }
-
     public boolean isReady() {
         return atTarget();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    private boolean atTarget() {
+        return currentVelRPM > targetRPM - RPM_THRESHOLD
+                && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;
+    }
+
     private static double tpsToRPM(double tps) {
         return tps / 28.0 * 60.0;
     }

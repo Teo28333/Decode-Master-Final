@@ -14,6 +14,6 @@ public class ShooterEquation {
     }
 
     public double getAirTime(double distance) {
-        return ((6.66667e-8) * Math.pow(distance, 3) - 0.00003 * Math.pow(distance, 2) + 0.00633333 * distance - 0.1);
+        return 7.5 * ((6.66667e-8) * Math.pow(distance, 3) - 0.00003 * Math.pow(distance, 2) + 0.00633333 * distance - 0.1);
     }
 }
