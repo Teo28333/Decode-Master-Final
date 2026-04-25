@@ -17,9 +17,9 @@ public class IntakeSS {
     private final Telemetry   telemetry;
 
     // ── Timers ────────────────────────────────────────────────────────────────
-    private final ElapsedTime motor1Timer   = new ElapsedTime();
-    private final ElapsedTime motor2Timer   = new ElapsedTime();
-    private final ElapsedTime gateFailsafe  = new ElapsedTime();
+    private final ElapsedTime motor1Timer  = new ElapsedTime();
+    private final ElapsedTime motor2Timer  = new ElapsedTime();
+    private final ElapsedTime gateFailsafe = new ElapsedTime();
 
     // ── Sensor readings ───────────────────────────────────────────────────────
     private double motor1Current = 0.0;
@@ -29,7 +29,7 @@ public class IntakeSS {
     private double firstMotorPow  = 0.0;
     private double secondMotorPow = 0.0;
     private double gatePos        = 0.0;
-    private double ledColor       = 0.0;
+    private double ledColor       = 0.3;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private boolean motor1Stopped = false;
@@ -37,7 +37,8 @@ public class IntakeSS {
     private boolean needToTurn    = false;
 
     // ── Constants ─────────────────────────────────────────────────────────────
-    private static final double ZONE_DIAGONAL = 10 * Math.sqrt(2);
+    private static final double ZONE_DIAGONAL    = 10 * Math.sqrt(2);
+    private static final double LED_IDLE         = 0.3;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public IntakeSS(HardwareMap hwm, Telemetry telemetry,
@@ -47,12 +48,14 @@ public class IntakeSS {
 
         intake1 = hwm.get(DcMotorEx.class, intakeMotor1);
         intake2 = hwm.get(DcMotorEx.class, intakeMotor2);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
-        intake2.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake1.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake2.setDirection(DcMotorSimple.Direction.REVERSE);
         intake1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         intake2.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         gate = hwm.get(Servo.class, gateServo);
+
+        gate.setPosition(closeGatePos);
 
         led = hwm.get(ServoImplEx.class, led1);
         led.setPwmRange(new PwmControl.PwmRange(500, 2500));
@@ -86,22 +89,20 @@ public class IntakeSS {
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
-    // TODO: Add the command here
-
     public void intakeCMD() {
         // Close gate after failsafe delay following a transfer
         if (gateFailsafe.milliseconds() > gateTime) {
             gatePos = closeGatePos;
         }
 
-        // Motor 2 stall detection
+        // Motor 2 ball detection
         if (motor2Current > firstCurrentThreshold) {
             if (motor2Timer.milliseconds() > motor2StopThreshold) motor2Stopped = true;
         } else {
             motor2Timer.reset();
         }
 
-        // Motor 1 stall detection
+        // Motor 1 ball detection
         if (motor1Current > secondCurrentThreshold) {
             if (motor1Timer.milliseconds() > motor1StopThreshold) motor1Stopped = true;
         } else {
@@ -115,7 +116,7 @@ public class IntakeSS {
         // LED feedback
         if      (motor1Stopped) ledColor = 0.50;
         else if (motor2Stopped) ledColor = 0.65;
-        else                    ledColor = 0.28;
+        else                    ledColor = LED_IDLE;
     }
 
     public void outtakeCMD() {
@@ -148,6 +149,14 @@ public class IntakeSS {
         gatePos        = openGatePos;
         firstMotorPow  = speed;
         secondMotorPow = speed;
+    }
+
+    /** Stop all motors and return LED to idle. Does NOT change gate position. */
+    public void stop() {
+        firstMotorPow  = 0.0;
+        secondMotorPow = 0.0;
+        ledColor       = LED_IDLE;
+        needToTurn     = false;
     }
 
     public void resetIntake() {

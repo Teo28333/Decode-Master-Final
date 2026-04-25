@@ -4,12 +4,11 @@ import com.bylazar.configurables.annotations.Configurable;
 
 @Configurable
 public class ShooterConstants {
-    public static double kP = 0.0075;
-    public static double kI = 0.00002;
-    public static double kD = 0.0005;
-    public static double kF = 0.0001458;
+    public static double kP = 0.00625;
+    public static double kI = 0.00001;
+    public static double kD = 0.0002;
+    public static double kF = 0.0001625;
     public static double kS = 0.060;
-    public static double kA = 0.1;
     public static double MAX_INTEGRAL = 5000;
     public static double RPM_THRESHOLD = 250;
     public static double nominalVoltage = 12.0;

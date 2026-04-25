@@ -6,6 +6,7 @@ import com.pedropathing.math.Vector;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.PwmControl;
 import com.qualcomm.robotcore.hardware.ServoImplEx;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.math.ShooterEquation;
@@ -72,10 +73,10 @@ public class TurretSS {
         double adjGoalY = goalY - robotVel.getYComponent() * dt;
 
         targetAngleRad       = Math.atan2(adjGoalY - robotY, adjGoalX - robotX);
-        actualTargetAngleRad = targetAngleRad - robotHeading;
+        actualTargetAngleRad = targetAngleRad + robotHeading;
 
         double targetDeg = Math.toDegrees(actualTargetAngleRad);
-        servoPos         = angleToServoPosition(targetDeg);
+        servoPos         = angleDegToServoPos(targetDeg);
         robotNeedToTurn  = Math.abs(targetDeg) > maxSafeAngleDeg;
     }
 
@@ -85,12 +86,8 @@ public class TurretSS {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    private double angleToServoPosition(double angleDeg) {
-        angleDeg = clamp(angleDeg, minSafeAngleDeg, maxSafeAngleDeg);
-        return (angleDeg - minAngleDeg) / (maxAngleDeg - minAngleDeg);
-    }
-
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
+    private double angleDegToServoPos(double angleDeg) {
+        double pos = (angleDeg - minAngleDeg) / (maxAngleDeg - minAngleDeg);
+        return Range.clip(pos, 0.0, 1.0);
     }
 }

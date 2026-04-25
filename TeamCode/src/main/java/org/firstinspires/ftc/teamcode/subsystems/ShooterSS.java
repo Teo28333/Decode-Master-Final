@@ -101,6 +101,8 @@ public class ShooterSS {
         hoodPos   = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
         motorPow  = pidfsController.calculate(targetRPM, currentVelRPM);
         ledColor  = atTarget() ? 0.5 : 0.39;
+
+        hood.setPosition(hoodPos);
     }
 
     public void setTuningMode(boolean enabled) {

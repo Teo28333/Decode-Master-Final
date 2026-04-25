@@ -29,45 +29,42 @@ public class Robot {
     private final LiftCommands   liftCommands;
 
     // ── Alliance ──────────────────────────────────────────────────────────────
-    private final boolean isRedAlliance;
+    private final boolean isBlueAlliance;
 
-    private static final double HEADING_RED  = 0.0;     // tune per field setup
-    private static final double HEADING_BLUE = Math.PI; // 180° mirror
+    private static final double HEADING_RED  = 0.0;
+    private static final double HEADING_BLUE = Math.PI;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 12.0;  // inches — tune per field
-    private static final double GOAL_Y_RED  = 120.0;
-    private static final double GOAL_X_BLUE = 132.0;
-    private static final double GOAL_Y_BLUE = 120.0;
+    private static final double GOAL_X_RED  = 142.0;
+    private static final double GOAL_Y_RED  = 144.0;
+    private static final double GOAL_X_BLUE = 2.0;
+    private static final double GOAL_Y_BLUE = 144.0;
 
     private final double goalX;
     private final double goalY;
 
     // ── Button edge detection ─────────────────────────────────────────────────
     private boolean lastIntake    = false;
-    private boolean lastOuttake   = false;
-    private boolean lastTransfer  = false;
     private boolean lastLift      = false;
     private boolean lastDisengage = false;
+    private boolean isInTuning;
 
     // ── Constructor ───────────────────────────────────────────────────────────
-    public Robot(HardwareMap hwm, Telemetry telemetry, boolean isRedAlliance) {
-        this.isRedAlliance = isRedAlliance;
+    public Robot(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance, boolean tuning) {
+        this.isBlueAlliance = isBlueAlliance;
+        this.isInTuning = tuning;
 
-        goalX = isRedAlliance ? GOAL_X_RED  : GOAL_X_BLUE;
-        goalY = isRedAlliance ? GOAL_Y_RED  : GOAL_Y_BLUE;
+        goalX = isBlueAlliance ? GOAL_X_BLUE : GOAL_X_RED;
+        goalY = isBlueAlliance ? GOAL_Y_BLUE : GOAL_Y_RED;
 
-        // Drivetrain — starting heading mirrors alliance side
         follower = Constants.createFollower(hwm);
 
-        // Subsystems — update hardware names to match your config
         intake  = new IntakeSS(hwm, telemetry, "intake1", "intake2", "gate", "led1");
         shooter = new ShooterSS(hwm, telemetry, "shooter1", "shooter2", "hood", "led2");
         turret  = new TurretSS(hwm, telemetry, "turret1", "turret2");
         pto     = new PtoSS(hwm, telemetry, "pto",
                 "frontLeft", "frontRight", "backLeft", "backRight");
 
-        // Commands
         intakeCommands = new IntakeCommands(intake);
         liftCommands   = new LiftCommands(pto);
 
@@ -78,21 +75,16 @@ public class Robot {
 
     // ── Robot start ───────────────────────────────────────────────────────────
     public void start() {
-        follower.setStartingPose(new Pose(0, 0, isRedAlliance ? HEADING_RED : HEADING_BLUE));
+        follower.setStartingPose(new Pose(72, 72, 0));
         follower.startTeleopDrive();
     }
 
     // ── Main teleop loop ──────────────────────────────────────────────────────
-
-    /**
-     * Call this every loop iteration in your TeleOp OpMode.
-     * Handles all driving, subsystem updates, and command logic.
-     *
-     * @param gamepad1 driver gamepad
-     */
     public void update(Gamepad gamepad1) {
+
+        shooter.setTuningMode(isInTuning);
         // ── Driving ───────────────────────────────────────────────────────────
-        double headingOffset = isRedAlliance ? HEADING_RED : HEADING_BLUE;
+        double headingOffset = isBlueAlliance ? HEADING_BLUE : HEADING_RED;
 
         follower.setTeleOpDrive(
                 -gamepad1.left_stick_y,
@@ -114,24 +106,29 @@ public class Robot {
         turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, goalX, goalY);
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
 
-        // ── Button edge detection ─────────────────────────────────────────────
-        boolean intakePressed    = gamepad1.a            && !lastIntake;
-        boolean outtakePressed   = gamepad1.b            && !lastOuttake;
-        boolean transferPressed  = gamepad1.x            && !lastTransfer;
+        // ── Edge detection for toggle buttons ─────────────────────────────────
+        boolean intakePressed    = gamepad1.right_bumper && !lastIntake;
         boolean liftPressed      = gamepad1.y            && !lastLift;
-        boolean disengagePressed = gamepad1.right_bumper && !lastDisengage;
+        boolean disengagePressed = gamepad1.left_bumper  && !lastDisengage;
 
-        // ── Intake commands ───────────────────────────────────────────────────
+        // ── Intake (toggle on right bumper) ───────────────────────────────────
         if (intakePressed) {
             if (intakeCommands.isIntaking()) intakeCommands.idle();
-            else                            intakeCommands.intake();
+            else                             intakeCommands.intake();
         }
-        if (outtakePressed) {
-            if (intakeCommands.isOuttaking()) intakeCommands.idle();
-            else                             intakeCommands.outtake();
+
+        // ── Outtake (active while B held) ─────────────────────────────────────
+        if (gamepad1.b) {
+            if (!intakeCommands.isOuttaking()) intakeCommands.outtake();
+        } else if (intakeCommands.isOuttaking()) {
+            intakeCommands.idle();
         }
-        if (transferPressed) {
-            intakeCommands.transfer();
+
+        // ── Transfer (active while X held) ────────────────────────────────────
+        if (gamepad1.x) {
+            if (!intakeCommands.isTransferring()) intakeCommands.transfer();
+        } else if (intakeCommands.isTransferring()) {
+            intakeCommands.idle();
         }
 
         // ── Lift commands ─────────────────────────────────────────────────────
@@ -139,11 +136,9 @@ public class Robot {
         if (disengagePressed) liftCommands.disengage();
 
         // ── Save button states for next frame ─────────────────────────────────
-        lastIntake    = gamepad1.a;
-        lastOuttake   = gamepad1.b;
-        lastTransfer  = gamepad1.x;
+        lastIntake    = gamepad1.right_bumper;
         lastLift      = gamepad1.y;
-        lastDisengage = gamepad1.right_bumper;
+        lastDisengage = gamepad1.left_bumper;
 
         // ── Command updates ───────────────────────────────────────────────────
         intakeCommands.update(
@@ -161,6 +156,6 @@ public class Robot {
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
-    public Follower getFollower()    { return follower;       }
-    public boolean  isRedAlliance()  { return isRedAlliance;  }
+    public Follower getFollower()    { return follower;        }
+    public boolean  isBlueAlliance() { return isBlueAlliance;  }
 }

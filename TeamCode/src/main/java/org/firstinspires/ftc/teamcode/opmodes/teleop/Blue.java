@@ -11,7 +11,7 @@ public class Blue extends OpMode {
     private Robot robot;
     @Override
     public void init() {
-        robot = new Robot(hardwareMap, telemetry, false);
+        robot = new Robot(hardwareMap, telemetry, true, false);
     }
     @Override
     public void start() {
