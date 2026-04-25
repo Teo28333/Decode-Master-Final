@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.subsystems.constant;
 
+import com.bylazar.configurables.annotations.Configurable;
+
+@Configurable
 public class IntakeConstants {
     public static double intakeSpeed = 1.0;
     public static double farTransferSpeed = 1.0;

@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.subsystems.constant;
 
+import com.bylazar.configurables.annotations.Configurable;
+
+@Configurable
 public class ShooterConstants {
     public static double kP = 0.0075;
     public static double kI = 0.00002;
