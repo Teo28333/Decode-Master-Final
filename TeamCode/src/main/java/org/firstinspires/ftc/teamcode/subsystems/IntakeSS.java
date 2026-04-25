@@ -71,17 +71,17 @@ public class IntakeSS {
         led.setPosition(ledColor);
     }
 
-    public void update() {
-        read();
-        write();
-        telemetry();
-    }
-
     public void telemetry() {
         telemetry.addData("Motor 1 current (mA)", motor1Current);
         telemetry.addData("Motor 2 current (mA)", motor2Current);
         telemetry.addData("Motor 1 stopped",      motor1Stopped);
         telemetry.addData("Motor 2 stopped",      motor2Stopped);
+    }
+
+    public void update() {
+        read();
+        write();
+        telemetry();
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
