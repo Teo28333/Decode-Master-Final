@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
 import static org.firstinspires.ftc.teamcode.subsystems.constant.ShooterConstants.*;
+import static org.firstinspires.ftc.teamcode.subsystems.constant.LedColors.*;
 
 import com.pedropathing.math.Vector;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -15,7 +16,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.math.PIDFSController;
 import org.firstinspires.ftc.teamcode.math.ShooterEquation;
 
-public class ShooterSS {
+public class ShooterSS implements SubsystemInterface {
 
     // ── Hardware ──────────────────────────────────────────────────────────────
     private final DcMotorEx       motor1;
@@ -29,11 +30,11 @@ public class ShooterSS {
     // ── Outputs ───────────────────────────────────────────────────────────────
     private double motorPow = 0.0;
     private double hoodPos  = 0.0;
-    private double ledColor = 0.0;
+    private double ledColor = SHOOTER_SPINNING_UP;
 
     // ── Sensor readings ───────────────────────────────────────────────────────
-    private double currentVelRPM  = 0.0;
-    private double targetRPM      = 0.0;
+    private double currentVelRPM   = 0.0;
+    private double targetRPM       = 0.0;
     private double currentDistance = 0.0;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -61,10 +62,12 @@ public class ShooterSS {
     }
 
     // ── Loop methods ──────────────────────────────────────────────────────────
+    @Override
     public void read() {
         currentVelRPM = tpsToRPM(motor1.getVelocity());
     }
 
+    @Override
     public void write() {
         motor1.setPower(motorPow);
         motor2.setPower(motorPow);
@@ -72,12 +75,14 @@ public class ShooterSS {
         led.setPosition(ledColor);
     }
 
+    @Override
     public void update() {
         read();
         write();
         telemetry();
     }
 
+    @Override
     public void telemetry() {
         telemetry.addData("Shooter target (RPM)",  targetRPM);
         telemetry.addData("Shooter current (RPM)", currentVelRPM);
@@ -85,7 +90,7 @@ public class ShooterSS {
         telemetry.addData("Shooter power",         motorPow);
         telemetry.addData("Hood position",         hoodPos);
         telemetry.addData("Distance (in)",         currentDistance);
-        telemetry.addData("At target",             atTarget());
+        telemetry.addData("At target",             isReady());
         telemetry.addData("Tuning mode",           tuningMode);
     }
 
@@ -104,7 +109,7 @@ public class ShooterSS {
         targetRPM = tuningMode ? tuningRPM     : shooterEquation.getTargetRPM(adjDistance);
         hoodPos   = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
         motorPow  = pidfsController.calculate(targetRPM, currentVelRPM);
-        ledColor  = atTarget() ? 0.5 : 0.39;
+        ledColor  = isReady() ? SHOOTER_AT_TARGET : SHOOTER_SPINNING_UP;
     }
 
     public void setTuningMode(boolean enabled) {
@@ -113,15 +118,15 @@ public class ShooterSS {
 
     // ── Getters ───────────────────────────────────────────────────────────────
     public boolean isReady() {
-        return atTarget();
+        return currentVelRPM > targetRPM - RPM_THRESHOLD
+            && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;
     }
+
+    public double getCurrentRPM()     { return currentVelRPM;   }
+    public double getTargetRPM()      { return targetRPM;        }
+    public double getCurrentDistance(){ return currentDistance;  }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    private boolean atTarget() {
-        return currentVelRPM > targetRPM - RPM_THRESHOLD
-                && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;
-    }
-
     private static double tpsToRPM(double tps) {
         return tps / 28.0 * 60.0;
     }

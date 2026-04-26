@@ -1,10 +1,5 @@
 package org.firstinspires.ftc.teamcode.pedroPathing;
 
-import static org.firstinspires.ftc.teamcode.HardwareNames.backL;
-import static org.firstinspires.ftc.teamcode.HardwareNames.backR;
-import static org.firstinspires.ftc.teamcode.HardwareNames.frontL;
-import static org.firstinspires.ftc.teamcode.HardwareNames.frontR;
-
 import com.pedropathing.control.PIDFCoefficients;
 import com.pedropathing.control.PredictiveBrakingCoefficients;
 import com.pedropathing.follower.Follower;

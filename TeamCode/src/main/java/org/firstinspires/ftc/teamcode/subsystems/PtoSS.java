@@ -11,7 +11,7 @@ import com.qualcomm.robotcore.hardware.Servo;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.math.PIDFController;
 
-public class PtoSS {
+public class PtoSS implements SubsystemInterface {
 
     // ── Hardware ──────────────────────────────────────────────────────────────
     private final Servo          servo;
@@ -30,9 +30,9 @@ public class PtoSS {
     private double liftCurrentPos = 0.0;
 
     // ── State ─────────────────────────────────────────────────────────────────
-    private boolean canLift          = false;
-    private boolean motorsAreReset   = false;
-    private boolean liftActive       = false;
+    private boolean canLift        = false;
+    private boolean motorsAreReset = false; // never cleared — lift is one-time
+    private boolean liftActive     = false;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public PtoSS(HardwareMap hwm, Telemetry telemetry,
@@ -57,10 +57,12 @@ public class PtoSS {
     }
 
     // ── Loop methods ──────────────────────────────────────────────────────────
+    @Override
     public void read() {
         liftCurrentPos = backLeft.getCurrentPosition();
     }
 
+    @Override
     public void write() {
         servo.setPosition(servoPos);
         if (liftActive) {
@@ -71,12 +73,14 @@ public class PtoSS {
         }
     }
 
+    @Override
     public void update() {
         read();
         write();
         telemetry();
     }
 
+    @Override
     public void telemetry() {
         telemetry.addData("PTO lift pos",    liftCurrentPos);
         telemetry.addData("PTO motor power", motorPow);
@@ -92,10 +96,11 @@ public class PtoSS {
     }
 
     public void disengagePtoCMD() {
-        servoPos       = disengagedPos;
-        canLift        = false;
-        liftActive     = false;
-        motorPow       = 0.0;
+        servoPos   = disengagedPos;
+        canLift    = false;
+        liftActive = false;
+        motorPow   = 0.0;
+        // NOTE: motorsAreReset intentionally NOT cleared — lift is one-time only
     }
 
     public void activateLiftCMD() {
@@ -103,7 +108,7 @@ public class PtoSS {
 
         liftActive = true;
 
-        // Reset encoders once at the start of each lift cycle
+        // Reset encoders once at the very start of the first lift cycle
         if (!motorsAreReset) {
             motorReset();
             motorsAreReset = true;
