@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.robot;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.math.Vector;
+import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -29,9 +30,6 @@ public class RobotAuton {
     // ── Alliance ──────────────────────────────────────────────────────────────
     private final boolean isBlueAlliance;
 
-    private static final double HEADING_RED  = 0.0;
-    private static final double HEADING_BLUE = Math.PI;
-
     // ── Goal position ─────────────────────────────────────────────────────────
     private static final double GOAL_X_RED  = 142.0;
     private static final double GOAL_Y_RED  = 144.0;
@@ -41,17 +39,22 @@ public class RobotAuton {
     public final double goalX;
     public final double goalY;
 
+    // ── Zero velocity fallback ────────────────────────────────────────────────
+    private static final Vector ZERO_VEL = new Vector(0, 0);
+
     // ── State ─────────────────────────────────────────────────────────────────
     private State currentState = State.IDLE;
 
     private enum State {
         IDLE,
         INTAKING,
-        TRANSFERRING
+        TRANSFERRING,
+        FOLLOWING,
+        FOLLOWING_AND_INTAKE
     }
 
     // ── Timed action ──────────────────────────────────────────────────────────
-    private final ElapsedTime actionTimer  = new ElapsedTime();
+    private final ElapsedTime actionTimer   = new ElapsedTime();
     private double             actionTimeoutMs = 0.0;
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -71,7 +74,6 @@ public class RobotAuton {
 
         intakeCommands = new IntakeCommands(intake);
 
-        // Safety: force PTO disengaged at startup
         pto.disengagePtoCMD();
         pto.write();
     }
@@ -82,30 +84,28 @@ public class RobotAuton {
     }
 
     // ── Main auton loop ───────────────────────────────────────────────────────
-
-    /**
-     * Call every loop unconditionally — handles all subsystems, state machine,
-     * and command updates regardless of whether isBusy() is true or false.
-     */
     public void update() {
         follower.update();
 
-        // Force PTO disengaged every frame — no lift allowed in auton
         pto.disengagePtoCMD();
 
         // ── Pose & velocity ───────────────────────────────────────────────────
-        Pose   pose     = follower.getPose();
-        double robotX   = pose.getX();
-        double robotY   = pose.getY();
-        double heading  = pose.getHeading();
-        Vector robotVel = follower.getVelocity();
+        Pose   pose       = follower.getPose();
+        double robotX     = pose.getX();
+        double robotY     = pose.getY();
+        double heading    = pose.getHeading();
+        Vector robotVel   = follower.getVelocity();
+        double angularVel = follower.getAngularVelocity();
 
-        // ── Turret & shooter (automatic) ──────────────────────────────────────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(), goalX, goalY);
+        if (robotVel == null) robotVel = ZERO_VEL;
+
+        // ── Turret & shooter — always running ─────────────────────────────────
+        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, angularVel, goalX, goalY);
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
 
-        // ── State machine — runs every loop, transitions to IDLE when done ────
+        // ── State machine ─────────────────────────────────────────────────────
         switch (currentState) {
+
             case INTAKING:
                 if (actionTimer.milliseconds() >= actionTimeoutMs) {
                     intakeCommands.idle();
@@ -116,8 +116,20 @@ public class RobotAuton {
             case TRANSFERRING:
                 boolean transferComplete = !intakeCommands.isTransferring();
                 boolean timedOut        = actionTimer.milliseconds() >= actionTimeoutMs;
-
                 if (transferComplete || timedOut) {
+                    intakeCommands.idle();
+                    currentState = State.IDLE;
+                }
+                break;
+
+            case FOLLOWING:
+                if (!follower.isBusy()) {
+                    currentState = State.IDLE;
+                }
+                break;
+
+            case FOLLOWING_AND_INTAKE:
+                if (!follower.isBusy()) {
                     intakeCommands.idle();
                     currentState = State.IDLE;
                 }
@@ -128,7 +140,7 @@ public class RobotAuton {
                 break;
         }
 
-        // ── Command & subsystem updates — always run ──────────────────────────
+        // ── Command & subsystem updates ───────────────────────────────────────
         intakeCommands.update(
                 robotX, robotY,
                 shooter.isReady(),
@@ -141,12 +153,9 @@ public class RobotAuton {
         pto.update();
     }
 
-    // ── Timed action commands ─────────────────────────────────────────────────
+    // ── Commands ──────────────────────────────────────────────────────────────
 
-    /**
-     * Start intaking for up to timeoutMs milliseconds.
-     * Robot stays busy until timeout expires.
-     */
+    /** Intake for up to timeoutMs ms. */
     public void intakeFor(double timeoutMs) {
         intakeCommands.intake();
         actionTimeoutMs = timeoutMs;
@@ -154,10 +163,7 @@ public class RobotAuton {
         actionTimer.reset();
     }
 
-    /**
-     * Start transferring for up to timeoutMs milliseconds.
-     * Robot stays busy until transfer completes or timeout expires.
-     */
+    /** Transfer for up to timeoutMs ms. Auto-exits when shot completes. */
     public void transferFor(double timeoutMs) {
         intakeCommands.transfer();
         actionTimeoutMs = timeoutMs;
@@ -165,16 +171,24 @@ public class RobotAuton {
         actionTimer.reset();
     }
 
-    // ── Getters ───────────────────────────────────────────────────────────────
-
-    /**
-     * Returns true while an action is running.
-     * Always call update() every loop regardless of isBusy().
-     */
-    public boolean isBusy() {
-        return currentState != State.IDLE;
+    /** Follow a path. isBusy() returns true until the path finishes. */
+    public void followPath(Path path) {
+        follower.followPath(path, true);
+        currentState = State.FOLLOWING;
     }
 
-    public Follower getFollower()    { return follower;       }
-    public boolean  isBlueAlliance() { return isBlueAlliance; }
+    /**
+     * Follow a path while intaking simultaneously.
+     * isBusy() returns true until the path finishes.
+     */
+    public void followPathAndIntake(Path path) {
+        follower.followPath(path, true);
+        intakeCommands.intake();
+        currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
+    // ── Getters ───────────────────────────────────────────────────────────────
+    public boolean isBusy()         { return currentState != State.IDLE; }
+    public Follower getFollower()    { return follower;                   }
+    public boolean  isBlueAlliance() { return isBlueAlliance;             }
 }

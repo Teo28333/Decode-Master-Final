@@ -35,6 +35,7 @@ public class IntakeSS {
     private boolean motor1Stopped = false;
     private boolean motor2Stopped = false;
     private boolean needToTurn    = false;
+    private boolean isIntaking = false;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private static final double ZONE_DIAGONAL    = 10 * Math.sqrt(2);
@@ -90,6 +91,7 @@ public class IntakeSS {
     // ── Commands ──────────────────────────────────────────────────────────────
 
     public void intakeCMD() {
+        isIntaking = true;
         // Close gate after failsafe delay following a transfer
         if (gateFailsafe.milliseconds() > gateTime) {
             gatePos = closeGatePos;
@@ -103,7 +105,7 @@ public class IntakeSS {
         }
 
         // Motor 1 ball detection
-        if (motor1Current > secondCurrentThreshold) {
+        if (motor1Current > secondCurrentThreshold && motor2Stopped) {
             if (motor1Timer.milliseconds() > motor1StopThreshold) motor1Stopped = true;
         } else {
             motor1Timer.reset();
@@ -150,11 +152,20 @@ public class IntakeSS {
         secondMotorPow = speed;
     }
 
+    public void openGateCMD(boolean ready, double x, double y) {
+        if (ready && isInShootingZone(x, y) && !isIntaking) {
+            gatePos = openGatePos;
+        } else {
+            gatePos = closeGatePos;
+        }
+    }
+
     /** Stop all motors and return LED to idle. Does NOT change gate position. */
     public void stop() {
         firstMotorPow  = 0.0;
         secondMotorPow = 0.0;
         ledColor       = LED_IDLE;
+        isIntaking = false;
         needToTurn     = false;
     }
 

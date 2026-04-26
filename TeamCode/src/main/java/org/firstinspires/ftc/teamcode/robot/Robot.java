@@ -32,17 +32,17 @@ public class Robot {
     private final boolean isBlueAlliance;
 
     private static final double HEADING_RED  = 0.0;
-    private static final double HEADING_BLUE = Math.PI;
+    private static final double HEADING_BLUE = 180;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 142.0;
-    private static final double GOAL_Y_RED  = 144.0;
-    private static final double GOAL_X_BLUE = 2.0;
-    private static final double GOAL_Y_BLUE = 144.0;
+    private static final double GOAL_X_RED  = 143.0;
+    private static final double GOAL_Y_RED  = 141.0;
+    private static final double GOAL_X_BLUE = 1.0;
+    private static final double GOAL_Y_BLUE = 141.0;
 
     // ── Auto-rotate tuning ────────────────────────────────────────────────────
     // How fast the robot rotates to face the goal during transfer (0.0 - 1.0)
-    private static final double TURN_CORRECTION_POWER = 0.4;
+    private static final double TURN_CORRECTION_POWER = 0.8;
 
     private final double goalX;
     private final double goalY;
@@ -98,6 +98,7 @@ public class Robot {
         // ── Turret & shooter (before driving so robotNeedToTurn is fresh) ──────
         turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(), goalX, goalY);
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
+        intake.openGateCMD(shooter.isReady(), robotX, robotY);
 
         // ── Driving ───────────────────────────────────────────────────────────
         double headingOffset = isBlueAlliance ? HEADING_BLUE : HEADING_RED;

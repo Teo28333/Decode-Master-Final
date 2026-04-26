@@ -10,7 +10,7 @@ public class ShooterTuning extends OpMode {
     private Robot robot;
     @Override
     public void init() {
-        robot = new Robot(hardwareMap, telemetry, false, true);
+        robot = new Robot(hardwareMap, telemetry, true, true);
     }
     @Override
     public void start() {
