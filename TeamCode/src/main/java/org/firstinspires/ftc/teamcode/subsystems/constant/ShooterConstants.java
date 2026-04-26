@@ -10,7 +10,7 @@ public class ShooterConstants {
     public static double kF = 0.0001625;
     public static double kS = 0.060;
     public static double MAX_INTEGRAL = 5000;
-    public static double RPM_THRESHOLD = 250;
+    public static double RPM_THRESHOLD = 100;
     public static double nominalVoltage = 12.0;
     public static double tuningRPM = 3000.0;
     public static double tuningHoodPos = 0.75;

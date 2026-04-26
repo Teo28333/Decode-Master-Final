@@ -36,6 +36,8 @@ public class IntakeSS {
     private boolean motor2Stopped = false;
     private boolean needToTurn    = false;
     private boolean isIntaking = false;
+    private boolean ignoreShootingZoneCheck = false;
+    private boolean ignoreAimCheck = false;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     private static final double ZONE_DIAGONAL    = 10 * Math.sqrt(2);
@@ -129,9 +131,10 @@ public class IntakeSS {
     }
 
     public void transferCMD(double x, double y, boolean ready, boolean aimedAtTarget) {
-        needToTurn = ready && !aimedAtTarget;
+        boolean canAim = aimedAtTarget || ignoreAimCheck;
+        needToTurn = ready && !canAim;
 
-        if (!ready || !aimedAtTarget || !isInShootingZone(x, y)) {
+        if (!ready || !canAim || !isInShootingZone(x, y)) {
             firstMotorPow  = 0.0;
             secondMotorPow = 0.0;
             if (gateFailsafe.milliseconds() > gateTime) {
@@ -146,8 +149,15 @@ public class IntakeSS {
             gateFailsafe.reset();
         }
 
-        double speed = isInBackZone(x, y) ? farTransferSpeed : closeTransferSpeed;
         gatePos        = openGatePos;
+
+        if (gateFailsafe.milliseconds() < gateTime) {
+            firstMotorPow  = 0.0;
+            secondMotorPow = 0.0;
+            return;
+        }
+
+        double speed = isInBackZone(x, y) ? farTransferSpeed : closeTransferSpeed;
         firstMotorPow  = speed;
         secondMotorPow = speed;
     }
@@ -178,7 +188,7 @@ public class IntakeSS {
 
     // ── Zone helpers ──────────────────────────────────────────────────────────
     private boolean isInShootingZone(double x, double y) {
-        return isInBackZone(x, y) || isInFrontZone(x, y);
+        return ignoreShootingZoneCheck || isInBackZone(x, y) || isInFrontZone(x, y);
     }
 
     private boolean isInBackZone(double x, double y) {
@@ -192,5 +202,13 @@ public class IntakeSS {
     // ── Getters ───────────────────────────────────────────────────────────────
     public boolean needToTurn() {
         return needToTurn;
+    }
+
+    public void setIgnoreShootingZoneCheck(boolean ignoreShootingZoneCheck) {
+        this.ignoreShootingZoneCheck = ignoreShootingZoneCheck;
+    }
+
+    public void setIgnoreAimCheck(boolean ignoreAimCheck) {
+        this.ignoreAimCheck = ignoreAimCheck;
     }
 }

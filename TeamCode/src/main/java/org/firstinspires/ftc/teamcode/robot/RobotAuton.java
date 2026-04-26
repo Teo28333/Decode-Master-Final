@@ -4,6 +4,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.math.Vector;
 import com.pedropathing.paths.Path;
+import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -31,10 +32,10 @@ public class RobotAuton {
     private final boolean isBlueAlliance;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 142.0;
-    private static final double GOAL_Y_RED  = 144.0;
-    private static final double GOAL_X_BLUE = 2.0;
-    private static final double GOAL_Y_BLUE = 144.0;
+    private static final double GOAL_X_RED  = 136.0;
+    private static final double GOAL_Y_RED  = 136.0;
+    private static final double GOAL_X_BLUE = 8.0;
+    private static final double GOAL_Y_BLUE = 136.0;
 
     public final double goalX;
     public final double goalY;
@@ -73,14 +74,23 @@ public class RobotAuton {
                 "frontLeft", "frontRight", "backLeft", "backRight");
 
         intakeCommands = new IntakeCommands(intake);
+        intake.setIgnoreShootingZoneCheck(true);
 
-        pto.disengagePtoCMD();
-        pto.write();
+        disengagePto();
     }
 
     // ── Robot start ───────────────────────────────────────────────────────────
     public void start(Pose startingPose) {
+        if (startingPose == null) {
+            throw new IllegalArgumentException("RobotAuton startingPose cannot be null");
+        }
+
         follower.setStartingPose(startingPose);
+    }
+
+    public void disengagePto() {
+        pto.disengagePtoCMD();
+        pto.write();
     }
 
     // ── Main auton loop ───────────────────────────────────────────────────────
@@ -114,11 +124,12 @@ public class RobotAuton {
                 break;
 
             case TRANSFERRING:
-                boolean transferComplete = !intakeCommands.isTransferring();
-                boolean timedOut        = actionTimer.milliseconds() >= actionTimeoutMs;
-                if (transferComplete || timedOut) {
+                boolean timedOut = actionTimer.milliseconds() >= actionTimeoutMs;
+                if (timedOut) {
                     intakeCommands.idle();
                     currentState = State.IDLE;
+                } else {
+                    intakeCommands.transfer();
                 }
                 break;
 
@@ -177,6 +188,12 @@ public class RobotAuton {
         currentState = State.FOLLOWING;
     }
 
+    /** Follow a path chain. isBusy() returns true until the path finishes. */
+    public void followPath(PathChain path) {
+        follower.followPath(path, true);
+        currentState = State.FOLLOWING;
+    }
+
     /**
      * Follow a path while intaking simultaneously.
      * isBusy() returns true until the path finishes.
@@ -187,8 +204,19 @@ public class RobotAuton {
         currentState = State.FOLLOWING_AND_INTAKE;
     }
 
+    /**
+     * Follow a path chain while intaking simultaneously.
+     * isBusy() returns true until the path finishes.
+     */
+    public void followPathAndIntake(PathChain path) {
+        follower.followPath(path, true);
+        intakeCommands.intake();
+        currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
     // ── Getters ───────────────────────────────────────────────────────────────
     public boolean isBusy()         { return currentState != State.IDLE; }
+    public boolean isShooterReady() { return shooter.isReady();          }
     public Follower getFollower()    { return follower;                   }
     public boolean  isBlueAlliance() { return isBlueAlliance;             }
 }
