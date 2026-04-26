@@ -1,26 +1,17 @@
 package org.firstinspires.ftc.teamcode.subsystems.constant;
 
+import com.bylazar.configurables.annotations.Configurable;
+
+@Configurable
 public class ShooterConstants {
-
-    // ── PIDF gains — tune in order: kF → kS → kP → kD → kI ──────────────────
-    public static double kP = 0.0;
-    public static double kI = 0.0;
-    public static double kD = 0.0;
-    public static double kF = 0.0;
-    public static double kS = 0.0;
-
-    // ── Controller limits ─────────────────────────────────────────────────────
-    public static final double MAX_INTEGRAL   = 0.25;
-    public static final double nominalVoltage = 12.0;
-
-    // ── Target threshold ──────────────────────────────────────────────────────
-    public static final double RPM_THRESHOLD = 50.0;
-
-    // ── Air time multiplier ───────────────────────────────────────────────────
-
-    public static double airTimeMultiplier = 7.5;
-
-    // ── Tuning mode values ────────────────────────────────────────────────────
-    public static double tuningRPM     = 3000.0; // tune
-    public static double tuningHoodPos = 0.5;    // tune
+    public static double kP = 0.00825;
+    public static double kI = 0.00001;
+    public static double kD = 0.0002;
+    public static double kF = 0.0001625;
+    public static double kS = 0.060;
+    public static double MAX_INTEGRAL = 5000;
+    public static double RPM_THRESHOLD = 250;
+    public static double nominalVoltage = 12.0;
+    public static double tuningRPM = 3000.0;
+    public static double tuningHoodPos = 0.75;
 }

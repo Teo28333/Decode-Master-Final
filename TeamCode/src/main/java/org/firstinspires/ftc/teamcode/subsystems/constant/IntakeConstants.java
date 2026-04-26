@@ -1,23 +1,20 @@
 package org.firstinspires.ftc.teamcode.subsystems.constant;
 
+import com.bylazar.configurables.annotations.Configurable;
+
+@Configurable
 public class IntakeConstants {
+    public static double intakeSpeed = 1.0;
+    public static double farTransferSpeed = 1.0;
+    public static double closeTransferSpeed = 1.0;
+    public static double outtakeSpeed = -0.75;
 
-    // ── Gate positions ────────────────────────────────────────────────────────
-    public static final double closeGatePos = 0.0; // tune
-    public static final double openGatePos  = 1.0; // tune
+    public static double motor2StopThreshold = 250;
+    public static double motor1StopThreshold = 1250;
+    public static double firstCurrentThreshold = 2500;
+    public static double secondCurrentThreshold = 2700;
+    public static double gateTime = 500;
 
-    // ── Motor speeds ──────────────────────────────────────────────────────────
-    public static final double intakeSpeed        =  1.0;
-    public static final double outtakeSpeed       = -1.0;
-    public static final double closeTransferSpeed =  0.5;
-    public static final double farTransferSpeed   =  0.8;
-
-    // ── Ball detection thresholds ─────────────────────────────────────────────
-    public static final double firstCurrentThreshold  = 3000.0; // mA — tune
-    public static final double secondCurrentThreshold = 3000.0; // mA — tune
-    public static final double motor2StopThreshold    = 150.0;  // ms — tune
-    public static final double motor1StopThreshold    = 150.0;  // ms — tune
-
-    // ── Gate failsafe ─────────────────────────────────────────────────────────
-    public static final double gateTime = 500.0; // ms
+    public static double openGatePos = 0.5;
+    public static double closeGatePos = 0.1;
 }

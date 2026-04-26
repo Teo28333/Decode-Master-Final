@@ -15,7 +15,7 @@ public class Red extends OpMode {
     }
     @Override
     public void start() {
-        robot.start(gamepad1);
+        robot.start();
     }
 
     @Override

@@ -1,15 +1,13 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
 import static org.firstinspires.ftc.teamcode.subsystems.constant.IntakeConstants.*;
-import static org.firstinspires.ftc.teamcode.subsystems.constant.LedColors.*;
 
 import com.qualcomm.robotcore.hardware.*;
 import com.qualcomm.robotcore.util.ElapsedTime;
-
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
-public class IntakeSS implements SubsystemInterface {
+public class IntakeSS {
 
     // ── Hardware ──────────────────────────────────────────────────────────────
     private final DcMotorEx   intake1;
@@ -31,17 +29,16 @@ public class IntakeSS implements SubsystemInterface {
     private double firstMotorPow  = 0.0;
     private double secondMotorPow = 0.0;
     private double gatePos        = 0.0;
-    private double ledColor       = INTAKE_IDLE;
+    private double ledColor       = 0.3;
 
     // ── State ─────────────────────────────────────────────────────────────────
-    // motor2 detects the first ball (outer motor)
-    // motor1 detects the second ball (inner motor) — can only trigger AFTER motor2
     private boolean motor1Stopped = false;
     private boolean motor2Stopped = false;
     private boolean needToTurn    = false;
 
     // ── Constants ─────────────────────────────────────────────────────────────
-    private static final double ZONE_DIAGONAL = 10 * Math.sqrt(2);
+    private static final double ZONE_DIAGONAL    = 10 * Math.sqrt(2);
+    private static final double LED_IDLE         = 0.8;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public IntakeSS(HardwareMap hwm, Telemetry telemetry,
@@ -51,25 +48,25 @@ public class IntakeSS implements SubsystemInterface {
 
         intake1 = hwm.get(DcMotorEx.class, intakeMotor1);
         intake2 = hwm.get(DcMotorEx.class, intakeMotor2);
-        intake1.setDirection(DcMotorSimple.Direction.REVERSE);
-        intake2.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake1.setDirection(DcMotorSimple.Direction.FORWARD);
+        intake2.setDirection(DcMotorSimple.Direction.REVERSE);
         intake1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         intake2.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         gate = hwm.get(Servo.class, gateServo);
+
+        gate.setPosition(closeGatePos);
 
         led = hwm.get(ServoImplEx.class, led1);
         led.setPwmRange(new PwmControl.PwmRange(500, 2500));
     }
 
     // ── Loop methods ──────────────────────────────────────────────────────────
-    @Override
     public void read() {
         motor1Current = intake1.getCurrent(CurrentUnit.MILLIAMPS);
         motor2Current = intake2.getCurrent(CurrentUnit.MILLIAMPS);
     }
 
-    @Override
     public void write() {
         intake1.setPower(firstMotorPow);
         intake2.setPower(secondMotorPow);
@@ -77,18 +74,13 @@ public class IntakeSS implements SubsystemInterface {
         led.setPosition(ledColor);
     }
 
-    @Override
     public void telemetry() {
         telemetry.addData("Motor 1 current (mA)", motor1Current);
         telemetry.addData("Motor 2 current (mA)", motor2Current);
         telemetry.addData("Motor 1 stopped",      motor1Stopped);
         telemetry.addData("Motor 2 stopped",      motor2Stopped);
-        telemetry.addData("Ball loaded",          isBallLoaded());
-        telemetry.addData("Fully loaded",         isFullyLoaded());
-        telemetry.addData("Need to turn",         needToTurn);
     }
 
-    @Override
     public void update() {
         read();
         write();
@@ -96,26 +88,25 @@ public class IntakeSS implements SubsystemInterface {
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
+
     public void intakeCMD() {
         // Close gate after failsafe delay following a transfer
         if (gateFailsafe.milliseconds() > gateTime) {
             gatePos = closeGatePos;
         }
 
-        // Motor 2 ball detection (first ball — outer motor)
+        // Motor 2 ball detection
         if (motor2Current > firstCurrentThreshold) {
             if (motor2Timer.milliseconds() > motor2StopThreshold) motor2Stopped = true;
         } else {
             motor2Timer.reset();
         }
 
-        // Motor 1 ball detection (second ball — inner motor)
-        // IMPORTANT: motor1 can ONLY stop after motor2 has already stopped.
-        // If motor2 has not stopped yet, motor1 timer is held at zero.
-        if (motor2Stopped && motor1Current > secondCurrentThreshold) {
+        // Motor 1 ball detection
+        if (motor1Current > secondCurrentThreshold) {
             if (motor1Timer.milliseconds() > motor1StopThreshold) motor1Stopped = true;
-        } else if (!motor2Stopped) {
-            motor1Timer.reset(); // prevent premature motor1 stop
+        } else {
+            motor1Timer.reset();
         }
 
         // Power output
@@ -123,9 +114,8 @@ public class IntakeSS implements SubsystemInterface {
         firstMotorPow  = motor1Stopped ? 0.0 : intakeSpeed;
 
         // LED feedback
-        if      (motor1Stopped) ledColor = INTAKE_BALL_MOTOR1;
-        else if (motor2Stopped) ledColor = INTAKE_BALL_MOTOR2;
-        else                    ledColor = INTAKE_IDLE;
+        if      (motor1Stopped) ledColor = 0.50;
+        else                    ledColor = LED_IDLE;
     }
 
     public void outtakeCMD() {
@@ -164,7 +154,7 @@ public class IntakeSS implements SubsystemInterface {
     public void stop() {
         firstMotorPow  = 0.0;
         secondMotorPow = 0.0;
-        ledColor       = INTAKE_IDLE;
+        ledColor       = LED_IDLE;
         needToTurn     = false;
     }
 
@@ -189,7 +179,7 @@ public class IntakeSS implements SubsystemInterface {
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
-    public boolean needToTurn()    { return needToTurn;                       }
-    public boolean isBallLoaded()  { return motor2Stopped;                    }
-    public boolean isFullyLoaded() { return motor1Stopped && motor2Stopped;   }
+    public boolean needToTurn() {
+        return needToTurn;
+    }
 }

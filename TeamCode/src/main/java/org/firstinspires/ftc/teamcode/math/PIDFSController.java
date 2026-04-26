@@ -5,28 +5,14 @@ import static org.firstinspires.ftc.teamcode.subsystems.constant.ShooterConstant
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
-/**
- * PIDF + kS velocity controller for the shooter flywheel.
- *
- * Tuning order: kF → kS → kP → kD → kI
- *
- *   kF — velocity feedforward (power per RPM unit)
- *   kS — static friction compensation (minimum power to overcome friction)
- *   kP — proportional gain
- *   kD — derivative gain (damping)
- *   kI — integral gain (only if persistent steady-state error remains)
- */
 public class PIDFSController {
-
-    // ── Constants ─────────────────────────────────────────────────────────────
-    private static final double NOMINAL_VOLTAGE = 12.0;
 
     // ── Hardware ──────────────────────────────────────────────────────────────
     private final VoltageSensor voltageSensor;
 
     // ── State ─────────────────────────────────────────────────────────────────
-    private double integral   = 0.0;
-    private double lastError  = 0.0;
+    private double integral  = 0.0;
+    private double lastError = 0.0;
     private long   lastTimeNs = -1L;
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -49,7 +35,7 @@ public class PIDFSController {
         lastTimeNs = nowNs;
         if (dt <= 0) return 0.0;
 
-        // If target is zero, reset state and coast
+        // If target is zero, reset and coast
         if (targetVel == 0.0) {
             reset();
             return 0.0;
@@ -58,24 +44,24 @@ public class PIDFSController {
         double error      = targetVel - currentVel;
         double derivative = (error - lastError) / dt;
 
-        // Anti-windup: only integrate when P term is not already saturating output
+        // Anti-windup: only integrate when output is not saturated
         if (Math.abs(kP * error) < 1.0) {
             integral = clamp(integral + error * dt, -MAX_INTEGRAL, MAX_INTEGRAL);
         }
 
-        // Voltage compensation — scale output to compensate for battery sag
+        // Voltage compensation
         double voltage      = voltageSensor.getVoltage();
-        double voltageScale = voltage > 0.1 ? NOMINAL_VOLTAGE / voltage : 1.0;
+        double voltageScale = voltage > 0.1 ? nominalVoltage / voltage : 1.0;
 
-        // Feedforward + static friction
+        // Feedforward
         double ff = kF * targetVel * voltageScale;
         double ks = Math.copySign(kS, targetVel);
 
         double output = kP * error
-                      + kI * integral
-                      + kD * derivative
-                      + ff
-                      + ks;
+                + kI * integral
+                + kD * derivative
+                + ff
+                + ks;
 
         lastError = error;
         return clamp(output, -1.0, 1.0);

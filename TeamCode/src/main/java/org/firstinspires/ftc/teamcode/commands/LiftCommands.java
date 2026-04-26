@@ -9,7 +9,7 @@ public class LiftCommands {
 
     // ── State ─────────────────────────────────────────────────────────────────
     private Mode    currentMode = Mode.IDLE;
-    private boolean hasLifted   = false; // lift is one-time only per match
+    private boolean hasLifted   = false;
 
     private enum Mode {
         IDLE,
@@ -29,7 +29,6 @@ public class LiftCommands {
     public void update() {
         switch (currentMode) {
             case ENGAGING:
-                // One-frame transition — engage servo then immediately start lifting
                 pto.engagePtoCMD();
                 setMode(Mode.LIFTING);
                 break;
@@ -39,7 +38,6 @@ public class LiftCommands {
                 break;
 
             case DISENGAGING:
-                // One-frame transition — disengage servo then return to idle
                 pto.disengagePtoCMD();
                 setMode(Mode.IDLE);
                 break;
@@ -64,7 +62,7 @@ public class LiftCommands {
 
     /**
      * Disengage the PTO gracefully through the state machine.
-     * Does NOT clear hasLifted — lift cannot be re-used once consumed.
+     * Does NOT clear hasLifted.
      */
     public void disengage() {
         setMode(Mode.DISENGAGING);
