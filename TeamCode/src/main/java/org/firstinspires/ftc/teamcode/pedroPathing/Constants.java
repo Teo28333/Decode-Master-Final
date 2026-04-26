@@ -22,12 +22,12 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 public class Constants {
     public static FollowerConstants followerConstants = new FollowerConstants()
             .mass(13.6078)
-            .forwardZeroPowerAcceleration(-29.9662)
-            .lateralZeroPowerAcceleration(-67.0801)
+            .forwardZeroPowerAcceleration(-33.04703)
+            .lateralZeroPowerAcceleration(-54.84401)
             .automaticHoldEnd(true)
 
             .headingPIDFCoefficients(new PIDFCoefficients(0.85 ,0,0.1,0.01))
-            .predictiveBrakingCoefficients(new PredictiveBrakingCoefficients(0.15,0.07749730045,0.00173983516))
+            .predictiveBrakingCoefficients(new PredictiveBrakingCoefficients(0.2,0.07749730045,0.00173983516))
             .centripetalScaling(0.0);
 
 
