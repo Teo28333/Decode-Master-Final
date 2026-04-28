@@ -35,17 +35,9 @@ public class Robot {
     private static final double HEADING_BLUE = 180;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 143.0;
-    private static final double GOAL_Y_RED  = 141.0;
-    private static final double GOAL_X_BLUE = 1.0;
-    private static final double GOAL_Y_BLUE = 141.0;
-
     // ── Auto-rotate tuning ────────────────────────────────────────────────────
     // How fast the robot rotates to face the goal during transfer (0.0 - 1.0)
-    private static final double TURN_CORRECTION_POWER = 0.8;
-
-    private final double goalX;
-    private final double goalY;
+    private static final double TURN_CORRECTION_POWER = 0.375;
 
     // ── Button edge detection ─────────────────────────────────────────────────
     private boolean lastIntake    = false;
@@ -58,9 +50,6 @@ public class Robot {
         this.isBlueAlliance = isBlueAlliance;
         this.isInTuning     = tuning;
 
-        goalX = isBlueAlliance ? GOAL_X_BLUE : GOAL_X_RED;
-        goalY = isBlueAlliance ? GOAL_Y_BLUE : GOAL_Y_RED;
-
         follower = Constants.createFollower(hwm);
 
         intake  = new IntakeSS(hwm, telemetry, "intake1", "intake2", "gate", "led1");
@@ -72,6 +61,8 @@ public class Robot {
         intakeCommands = new IntakeCommands(intake);
         liftCommands   = new LiftCommands(pto);
 
+        PanelsDebug.init();
+
         // Safety: force PTO disengaged at startup before any loop runs
         pto.disengagePtoCMD();
         pto.write();
@@ -79,7 +70,8 @@ public class Robot {
 
     // ── Robot start ───────────────────────────────────────────────────────────
     public void start() {
-        follower.setStartingPose(new Pose(72, 72, 0));
+        follower.setStartingPose(PoseStorage.currentPose);
+        follower.setMaxPower(RobotConstants.DRIVE_SPEED_MULTIPLIER);
         follower.startTeleopDrive();
     }
 
@@ -96,16 +88,17 @@ public class Robot {
         Vector robotVel = follower.getVelocity();
 
         // ── Turret & shooter (before driving so robotNeedToTurn is fresh) ──────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(), goalX, goalY);
-        shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
-        intake.openGateCMD(shooter.isReady(), robotX, robotY);
+        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(),
+                aimGoalX(), aimGoalY());
+        shooter.shooterSpinCMD(robotX, robotY, heading, robotVel,
+                shootingGoalX(), shootingGoalY(), intakeCommands.isTransferring());
 
         // ── Driving ───────────────────────────────────────────────────────────
         double headingOffset = isBlueAlliance ? HEADING_BLUE : HEADING_RED;
 
         // During transfer, if the robot needs to turn to face the goal,
         // override the driver's rotation input with an auto-correction
-        double turnInput = -gamepad1.right_stick_x;
+        double turnInput = -gamepad1.right_stick_x * 0.75;
         if (intakeCommands.isTransferring() && turret.robotNeedToTurn()) {
             // Determine turn direction from the turret's robot-relative angle:
             // positive angle → goal is to the left → turn CCW (positive turn)
@@ -114,13 +107,14 @@ public class Robot {
         }
 
         follower.setTeleOpDrive(
-                -gamepad1.left_stick_y,
-                -gamepad1.left_stick_x,
-                turnInput,
+                -gamepad1.left_stick_y * RobotConstants.DRIVE_SPEED_MULTIPLIER,
+                -gamepad1.left_stick_x * RobotConstants.DRIVE_SPEED_MULTIPLIER,
+                turnInput * RobotConstants.DRIVE_SPEED_MULTIPLIER,
                 false,
                 Math.toRadians(headingOffset)
         );
         follower.update();
+        PoseStorage.setCurrentPose(follower.getPose());
 
         // ── Edge detection for toggle buttons ─────────────────────────────────
         boolean intakePressed    = gamepad1.right_bumper && !lastIntake;
@@ -169,9 +163,26 @@ public class Robot {
         shooter.update();
         turret.update();
         pto.update();
+        PanelsDebug.update(follower, shooter, turret, intakeCommands.isTransferring());
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
     public Follower getFollower()    { return follower;        }
     public boolean  isBlueAlliance() { return isBlueAlliance;  }
+
+    private double aimGoalX() {
+        return isBlueAlliance ? RobotConstants.AIM_GOAL_X_BLUE : RobotConstants.AIM_GOAL_X_RED;
+    }
+
+    private double aimGoalY() {
+        return isBlueAlliance ? RobotConstants.AIM_GOAL_Y_BLUE : RobotConstants.AIM_GOAL_Y_RED;
+    }
+
+    private double shootingGoalX() {
+        return isBlueAlliance ? RobotConstants.SHOOTING_GOAL_X_BLUE : RobotConstants.SHOOTING_GOAL_X_RED;
+    }
+
+    private double shootingGoalY() {
+        return isBlueAlliance ? RobotConstants.SHOOTING_GOAL_Y_BLUE : RobotConstants.SHOOTING_GOAL_Y_RED;
+    }
 }

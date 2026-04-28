@@ -31,7 +31,6 @@ public class IntakeCommands {
 
             case TRANSFERRING:
                 intake.transferCMD(robotX, robotY, shooterReady, aimedAtTarget);
-                if (shooterReady && aimedAtTarget) setMode(Mode.IDLE);
                 break;
 
             case IDLE:
@@ -42,7 +41,9 @@ public class IntakeCommands {
     }
 
     public void intake() {
-        intake.resetIntake();
+        if (currentMode != Mode.INTAKING) {
+            intake.resetIntake();
+        }
         setMode(Mode.INTAKING);
     }
 
@@ -62,6 +63,9 @@ public class IntakeCommands {
     public boolean isOuttaking()    { return currentMode == Mode.OUTTAKING;    }
     public boolean isTransferring() { return currentMode == Mode.TRANSFERRING; }
     public boolean needToTurn()     { return intake.needToTurn();              }
+    public IntakeSS.BallState getBallState() { return intake.getBallState();   }
+    public IntakeSS.TransferState getTransferState() { return intake.getTransferState(); }
+    public boolean isFull() { return intake.isFull(); }
 
     private void setMode(Mode mode) {
         currentMode = mode;

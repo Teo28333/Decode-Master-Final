@@ -17,32 +17,30 @@ import org.firstinspires.ftc.teamcode.math.ShooterEquation;
 
 public class ShooterSS {
 
-    // ── Hardware ──────────────────────────────────────────────────────────────
-    private final DcMotorEx       motor1;
-    private final DcMotorEx       motor2;
-    private final Servo           hood;
-    private final ServoImplEx     led;
-    private final Telemetry       telemetry;
+    private final DcMotorEx motor1;
+    private final DcMotorEx motor2;
+    private final Servo hood;
+    private final ServoImplEx led;
+    private final Telemetry telemetry;
     private final ShooterEquation shooterEquation = new ShooterEquation();
     private final PIDFSController pidfsController;
 
-    // ── Outputs ───────────────────────────────────────────────────────────────
     private double motorPow = 0.0;
-    private double hoodPos  = 0.0;
+    private double hoodPos = 0.0;
     private double ledColor = 0.0;
 
-    // ── Sensor readings ───────────────────────────────────────────────────────
-    private double currentVelRPM  = 0.0;
-    private double targetRPM      = 0.0;
+    private double currentVelRPM = 0.0;
+    private double targetRPM = 0.0;
+    private double correctedTargetRPM = 0.0;
+    private double rpmDrop = 0.0;
+    private double hoodDrop = 0.0;
     private double currentDistance = 0.0;
 
-    // ── State ─────────────────────────────────────────────────────────────────
     private boolean tuningMode = false;
 
-    // ── Constructor ───────────────────────────────────────────────────────────
     public ShooterSS(HardwareMap hwm, Telemetry telemetry,
                      String shooterMotor1, String shooterMotor2,
-                     String hoodServo,    String led2) {
+                     String hoodServo, String led2) {
         this.telemetry = telemetry;
 
         motor1 = hwm.get(DcMotorEx.class, shooterMotor1);
@@ -60,9 +58,8 @@ public class ShooterSS {
         pidfsController = new PIDFSController(hwm);
     }
 
-    // ── Loop methods ──────────────────────────────────────────────────────────
     public void read() {
-        currentVelRPM = tpsToRPM(motor1.getVelocity());
+        currentVelRPM = Math.abs(tpsToRPM(motor1.getVelocity()));
     }
 
     public void write() {
@@ -79,44 +76,80 @@ public class ShooterSS {
     }
 
     public void telemetry() {
-        telemetry.addData("Shooter target (RPM)",  targetRPM);
+        telemetry.addData("Shooter target (RPM)", targetRPM);
+        telemetry.addData("Shooter corrected target (RPM)", correctedTargetRPM);
         telemetry.addData("Shooter current (RPM)", currentVelRPM);
-        telemetry.addData("Shooter error (RPM)",   targetRPM - currentVelRPM);
-        telemetry.addData("Shooter power",         motorPow);
-        telemetry.addData("Hood position",         hoodPos);
-        telemetry.addData("Distance (in)",         currentDistance);
-        telemetry.addData("At target",             atTarget());
-        telemetry.addData("Tuning mode",           tuningMode);
+        telemetry.addData("Shooter error (RPM)", targetRPM - currentVelRPM);
+        telemetry.addData("Shooter RPM drop", rpmDrop);
+        telemetry.addData("Shooter power", motorPow);
+        telemetry.addData("Hood recovery drop", hoodDrop);
+        telemetry.addData("Hood position", hoodPos);
+        telemetry.addData("Distance (in)", currentDistance);
+        telemetry.addData("At target", atTarget());
+        telemetry.addData("Tuning mode", tuningMode);
     }
 
-    // ── Commands ──────────────────────────────────────────────────────────────
     public void shooterSpinCMD(double robotX, double robotY, double robotHeading,
                                Vector robotVel, double goalX, double goalY) {
-        // Compensate goal position for robot velocity × ball air time
-        double distance    = Math.hypot(goalX - robotX, goalY - robotY);
-        double dt          = shooterEquation.getAirTime(distance);
-        double adjGoalX    = goalX - robotVel.getXComponent() * dt;
-        double adjGoalY    = goalY - robotVel.getYComponent() * dt;
+        shooterSpinCMD(robotX, robotY, robotHeading, robotVel, goalX, goalY, false);
+    }
+
+    public void shooterSpinCMD(double robotX, double robotY, double robotHeading,
+                               Vector robotVel, double goalX, double goalY,
+                               boolean transferActive) {
+        if (robotVel == null) {
+            robotVel = new Vector(0, 0);
+        }
+
+        double distance = Math.hypot(goalX - robotX, goalY - robotY);
+        double dt = shooterEquation.getAirTime(distance);
+        double adjGoalX = goalX - robotVel.getXComponent() * dt;
+        double adjGoalY = goalY - robotVel.getYComponent() * dt;
         double adjDistance = Math.hypot(adjGoalX - robotX, adjGoalY - robotY);
 
         currentDistance = adjDistance;
 
-        targetRPM = tuningMode ? tuningRPM     : shooterEquation.getTargetRPM(adjDistance);
-        hoodPos   = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
-        motorPow  = pidfsController.calculate(targetRPM, currentVelRPM);
-        ledColor  = atTarget() ? 0.5 : 0.39;
+        targetRPM = tuningMode ? tuningRPM : shooterEquation.getTargetRPM(adjDistance);
+        double baseHoodPos = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
+
+        rpmDrop = Math.max(0.0, targetRPM - currentVelRPM);
+        double activeRecoveryDrop = transferActive
+                ? Math.max(0.0, rpmDrop - TRANSFER_RECOVERY_DEADBAND_RPM)
+                : 0.0;
+        correctedTargetRPM = targetRPM + activeRecoveryDrop * TRANSFER_RECOVERY_MULTIPLIER;
+
+        double hoodDropRatio = Math.min(rpmDrop, MAX_HOOD_DROP_RPM_LOSS) / MAX_HOOD_DROP_RPM_LOSS;
+        hoodDrop = transferActive ? MAX_HOOD_RECOVERY_DROP * hoodDropRatio : 0.0;
+        hoodPos = Math.max(0.5, baseHoodPos - hoodDrop);
+
+        motorPow = pidfsController.calculate(correctedTargetRPM, currentVelRPM);
+        ledColor = atTarget() ? 0.5 : 0.39;
     }
 
     public void setTuningMode(boolean enabled) {
         tuningMode = enabled;
     }
 
-    // ── Getters ───────────────────────────────────────────────────────────────
     public boolean isReady() {
         return atTarget();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    public double getTargetRPM() {
+        return targetRPM;
+    }
+
+    public double getCorrectedTargetRPM() {
+        return correctedTargetRPM;
+    }
+
+    public double getCurrentVelRPM() {
+        return currentVelRPM;
+    }
+
+    public double getHoodPos() {
+        return hoodPos;
+    }
+
     private boolean atTarget() {
         return currentVelRPM > targetRPM - RPM_THRESHOLD
                 && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;

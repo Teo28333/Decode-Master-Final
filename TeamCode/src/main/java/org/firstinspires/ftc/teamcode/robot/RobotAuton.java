@@ -32,14 +32,6 @@ public class RobotAuton {
     private final boolean isBlueAlliance;
 
     // ── Goal position ─────────────────────────────────────────────────────────
-    private static final double GOAL_X_RED  = 136.0;
-    private static final double GOAL_Y_RED  = 136.0;
-    private static final double GOAL_X_BLUE = 8.0;
-    private static final double GOAL_Y_BLUE = 136.0;
-
-    public final double goalX;
-    public final double goalY;
-
     // ── Zero velocity fallback ────────────────────────────────────────────────
     private static final Vector ZERO_VEL = new Vector(0, 0);
 
@@ -57,13 +49,11 @@ public class RobotAuton {
     // ── Timed action ──────────────────────────────────────────────────────────
     private final ElapsedTime actionTimer   = new ElapsedTime();
     private double             actionTimeoutMs = 0.0;
+    private double             pathIntakeTimeoutMs = -1.0;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public RobotAuton(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance) {
         this.isBlueAlliance = isBlueAlliance;
-
-        goalX = isBlueAlliance ? GOAL_X_BLUE : GOAL_X_RED;
-        goalY = isBlueAlliance ? GOAL_Y_BLUE : GOAL_Y_RED;
 
         follower = Constants.createFollower(hwm);
 
@@ -75,6 +65,8 @@ public class RobotAuton {
 
         intakeCommands = new IntakeCommands(intake);
         intake.setIgnoreShootingZoneCheck(true);
+
+        PanelsDebug.init();
 
         disengagePto();
     }
@@ -110,8 +102,10 @@ public class RobotAuton {
         if (robotVel == null) robotVel = ZERO_VEL;
 
         // ── Turret & shooter — always running ─────────────────────────────────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, angularVel, goalX, goalY);
-        shooter.shooterSpinCMD(robotX, robotY, heading, robotVel, goalX, goalY);
+        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, angularVel,
+                aimGoalX(), aimGoalY());
+        shooter.shooterSpinCMD(robotX, robotY, heading, robotVel,
+                shootingGoalX(), shootingGoalY(), intakeCommands.isTransferring());
 
         // ── State machine ─────────────────────────────────────────────────────
         switch (currentState) {
@@ -140,8 +134,14 @@ public class RobotAuton {
                 break;
 
             case FOLLOWING_AND_INTAKE:
+                if (pathIntakeTimeoutMs >= 0.0 && actionTimer.milliseconds() >= pathIntakeTimeoutMs) {
+                    intakeCommands.idle();
+                    pathIntakeTimeoutMs = -1.0;
+                }
+
                 if (!follower.isBusy()) {
                     intakeCommands.idle();
+                    pathIntakeTimeoutMs = -1.0;
                     currentState = State.IDLE;
                 }
                 break;
@@ -162,6 +162,8 @@ public class RobotAuton {
         shooter.update();
         turret.update();
         pto.update();
+        PanelsDebug.update(follower, shooter, turret, intakeCommands.isTransferring());
+        savePose();
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -188,9 +190,21 @@ public class RobotAuton {
         currentState = State.FOLLOWING;
     }
 
+    /** Follow a path with optional end hold. */
+    public void followPath(Path path, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
+        currentState = State.FOLLOWING;
+    }
+
     /** Follow a path chain. isBusy() returns true until the path finishes. */
     public void followPath(PathChain path) {
         follower.followPath(path, true);
+        currentState = State.FOLLOWING;
+    }
+
+    /** Follow a path chain with optional end hold. */
+    public void followPath(PathChain path, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
         currentState = State.FOLLOWING;
     }
 
@@ -201,7 +215,38 @@ public class RobotAuton {
     public void followPathAndIntake(Path path) {
         follower.followPath(path, true);
         intakeCommands.intake();
+        pathIntakeTimeoutMs = -1.0;
         currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
+    /**
+     * Follow a path while intaking simultaneously, with optional end hold.
+     * isBusy() returns true until the path finishes.
+     */
+    public void followPathAndIntake(Path path, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
+        intakeCommands.intake();
+        pathIntakeTimeoutMs = -1.0;
+        currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
+    /**
+     * Follow a path while intaking only for the first intakeTimeoutMs.
+     * The path keeps running after the intake turns off.
+     */
+    public void followPathAndIntakeFor(Path path, double intakeTimeoutMs) {
+        followPathAndIntakeFor(path, intakeTimeoutMs, true);
+    }
+
+    /**
+     * Follow a path while intaking only for the first intakeTimeoutMs, with optional end hold.
+     */
+    public void followPathAndIntakeFor(Path path, double intakeTimeoutMs, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
+        intakeCommands.intake();
+        pathIntakeTimeoutMs = intakeTimeoutMs;
+        currentState = State.FOLLOWING_AND_INTAKE;
+        actionTimer.reset();
     }
 
     /**
@@ -211,7 +256,38 @@ public class RobotAuton {
     public void followPathAndIntake(PathChain path) {
         follower.followPath(path, true);
         intakeCommands.intake();
+        pathIntakeTimeoutMs = -1.0;
         currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
+    /**
+     * Follow a path chain while intaking simultaneously, with optional end hold.
+     * isBusy() returns true until the path finishes.
+     */
+    public void followPathAndIntake(PathChain path, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
+        intakeCommands.intake();
+        pathIntakeTimeoutMs = -1.0;
+        currentState = State.FOLLOWING_AND_INTAKE;
+    }
+
+    /**
+     * Follow a path chain while intaking only for the first intakeTimeoutMs.
+     * The path keeps running after the intake turns off.
+     */
+    public void followPathAndIntakeFor(PathChain path, double intakeTimeoutMs) {
+        followPathAndIntakeFor(path, intakeTimeoutMs, true);
+    }
+
+    /**
+     * Follow a path chain while intaking only for the first intakeTimeoutMs, with optional end hold.
+     */
+    public void followPathAndIntakeFor(PathChain path, double intakeTimeoutMs, boolean holdEnd) {
+        follower.followPath(path, holdEnd);
+        intakeCommands.intake();
+        pathIntakeTimeoutMs = intakeTimeoutMs;
+        currentState = State.FOLLOWING_AND_INTAKE;
+        actionTimer.reset();
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
@@ -219,4 +295,24 @@ public class RobotAuton {
     public boolean isShooterReady() { return shooter.isReady();          }
     public Follower getFollower()    { return follower;                   }
     public boolean  isBlueAlliance() { return isBlueAlliance;             }
+
+    public void savePose() {
+        PoseStorage.setCurrentPose(follower.getPose());
+    }
+
+    private double aimGoalX() {
+        return isBlueAlliance ? RobotConstants.AIM_GOAL_X_BLUE : RobotConstants.AIM_GOAL_X_RED;
+    }
+
+    private double aimGoalY() {
+        return isBlueAlliance ? RobotConstants.AIM_GOAL_Y_BLUE : RobotConstants.AIM_GOAL_Y_RED;
+    }
+
+    private double shootingGoalX() {
+        return isBlueAlliance ? RobotConstants.SHOOTING_GOAL_X_BLUE : RobotConstants.SHOOTING_GOAL_X_RED;
+    }
+
+    private double shootingGoalY() {
+        return isBlueAlliance ? RobotConstants.SHOOTING_GOAL_Y_BLUE : RobotConstants.SHOOTING_GOAL_Y_RED;
+    }
 }

@@ -13,8 +13,10 @@ import org.firstinspires.ftc.teamcode.robot.RobotAuton;
 abstract class FarAuto extends OpMode {
     private static final double FIELD_SIZE = 144.0;
     private static final double PRELOAD_SPIN_UP_MS = 2250.0;
-    private static final double PRELOAD_SHOOT_MS = 1750.0;
-    private static final double SHOOT_MS = 1750.0;
+    private static final double PRELOAD_SHOOT_MS = 1000.0;
+    private static final double SHOOT_MS = 1000.0;
+    private static final double HUMAN_PLAYER_CONFIRM_INTAKE_MS = 1000.0;
+    private static final double RETURN_INTAKE_MS = 250.0;
 
     private RobotAuton robot;
     private PathChain[] paths;
@@ -25,20 +27,23 @@ abstract class FarAuto extends OpMode {
         PRELOAD_SPIN_UP,
         PRELOAD_SHOOT,
         PRELOAD_FEED,
-        LINE_INTAKE,
-        LINE_RETURN,
-        LINE_SHOOT,
-        LINE_FEED,
-        ZONE_INTAKE,
-        ZONE_CONFIRM_INTAKE,
-        ZONE_RETURN,
-        ZONE_RETURN_TO_SHOOT,
-        ZONE_SHOOT,
-        ZONE_FEED,
-        OVERFLOW_INTAKE,
-        OVERFLOW_RETURN,
-        OVERFLOW_SHOOT,
-        OVERFLOW_FEED,
+        SPIKE_INTAKE,
+        SPIKE_RETURN,
+        SPIKE_SHOOT,
+        SPIKE_FEED,
+        HUMAN_PLAYER_INTAKE,
+        HUMAN_PLAYER_CONFIRM_INTAKE,
+        HUMAN_PLAYER_RETURN,
+        HUMAN_PLAYER_SHOOT,
+        HUMAN_PLAYER_FEED,
+        FLOW_1_INTAKE,
+        FLOW_1_RETURN,
+        FLOW_1_SHOOT,
+        FLOW_1_FEED,
+        FLOW_2_INTAKE,
+        FLOW_2_RETURN,
+        FLOW_2_SHOOT,
+        FLOW_2_FEED,
         DONE
     }
 
@@ -89,27 +94,35 @@ abstract class FarAuto extends OpMode {
         telemetry.update();
     }
 
+    @Override
+    public void stop() {
+        robot.savePose();
+    }
+
     private Pose buildPaths() {
         Pose startingPose = new Pose(56.000, 8.500, Math.toRadians(180));
-        Pose shootingPosition = new Pose(56.000, 10.000);
-        Pose lineIntakeControl = new Pose(51.000, 39.000);
-        Pose lineIntakePose = new Pose(10.000, 31.000);
-        Pose controlZoneIntake = new Pose(16,10);
-        Pose zoneIntakePose = new Pose(10.000, 10.000);
-        Pose overflowIntakeControl = new Pose(8.000, 10.000);
-        Pose overflowIntakePose = new Pose(10.000, 53.000);
-
-        Pose shootingPose = withHeading(shootingPosition, headingTo(shootingPosition, lineIntakeControl));
 
         paths = new PathChain[] {
-                tangentCurve(shootingPose, lineIntakeControl, lineIntakePose, false),
-                tangentLine(lineIntakePose, shootingPose, true),
-                tangentLine(shootingPose, zoneIntakePose, false),
-                tangentLine(zoneIntakePose, controlZoneIntake, true),
-                tangentLine(controlZoneIntake, zoneIntakePose,false),
-                tangentLine(zoneIntakePose, shootingPose, true),
-                tangentCurve(shootingPose, overflowIntakeControl, overflowIntakePose, false),
-                tangentCurve(overflowIntakePose, overflowIntakeControl, shootingPose, true)
+                tangentCurve(
+                        startingPose,
+                        new Pose(54.213, 28.075),
+                        new Pose(32.267, 38.760),
+                        new Pose(15.000, 36.000),
+                        false
+                ),
+                tangentLine(new Pose(15.000, 36.000), new Pose(51.863, 13.768), true),
+                tangentLine(new Pose(51.863, 13.768), new Pose(10.000, 9.500), false),
+                tangentLine(new Pose(10.000, 9.500), new Pose(48.000, 9.000), true),
+                tangentCurve(
+                        new Pose(48.000, 9.000),
+                        new Pose(44.076, 31.476),
+                        new Pose(34.878, 44.499),
+                        new Pose(10.000, 44.253),
+                        false
+                ),
+                tangentLine(new Pose(10.000, 44.253), new Pose(53.000, 17.000), true),
+                tangentLine(new Pose(53.000, 17.000), new Pose(10.000, 10.000), false),
+                tangentLine(new Pose(10.000, 10.000), new Pose(48.000, 10.000), true)
         };
 
         return alliancePose(startingPose);
@@ -123,73 +136,87 @@ abstract class FarAuto extends OpMode {
                 break;
 
             case PRELOAD_FEED:
-                autoStep = AutoStep.LINE_INTAKE;
+                autoStep = AutoStep.SPIKE_INTAKE;
                 robot.followPathAndIntake(paths[0]);
                 break;
 
-            case LINE_INTAKE:
-                autoStep = AutoStep.LINE_RETURN;
-                robot.followPath(paths[1]);
+            case SPIKE_INTAKE:
+                autoStep = AutoStep.SPIKE_RETURN;
+                robot.followPathAndIntakeFor(paths[1], RETURN_INTAKE_MS);
                 break;
 
-            case LINE_RETURN:
-                autoStep = AutoStep.LINE_SHOOT;
+            case SPIKE_RETURN:
+                autoStep = AutoStep.SPIKE_SHOOT;
                 break;
 
-            case LINE_SHOOT:
-                autoStep = AutoStep.LINE_FEED;
+            case SPIKE_SHOOT:
+                autoStep = AutoStep.SPIKE_FEED;
                 robot.transferFor(SHOOT_MS);
                 break;
 
-            case LINE_FEED:
-                autoStep = AutoStep.ZONE_INTAKE;
+            case SPIKE_FEED:
+                autoStep = AutoStep.HUMAN_PLAYER_INTAKE;
                 robot.followPathAndIntake(paths[2]);
                 break;
 
-            case ZONE_INTAKE:
-                autoStep = AutoStep.ZONE_CONFIRM_INTAKE;
-                robot.followPathAndIntake(paths[3]);
+            case HUMAN_PLAYER_INTAKE:
+                autoStep = AutoStep.HUMAN_PLAYER_CONFIRM_INTAKE;
+                robot.intakeFor(HUMAN_PLAYER_CONFIRM_INTAKE_MS);
                 break;
 
-            case ZONE_CONFIRM_INTAKE:
-                autoStep = AutoStep.ZONE_RETURN;
+            case HUMAN_PLAYER_CONFIRM_INTAKE:
+                autoStep = AutoStep.HUMAN_PLAYER_RETURN;
+                robot.followPathAndIntakeFor(paths[3], RETURN_INTAKE_MS);
+                break;
+
+            case HUMAN_PLAYER_RETURN:
+                autoStep = AutoStep.HUMAN_PLAYER_SHOOT;
+                break;
+
+            case HUMAN_PLAYER_SHOOT:
+                autoStep = AutoStep.HUMAN_PLAYER_FEED;
+                robot.transferFor(SHOOT_MS);
+                break;
+
+            case HUMAN_PLAYER_FEED:
+                autoStep = AutoStep.FLOW_1_INTAKE;
                 robot.followPathAndIntake(paths[4]);
                 break;
 
-            case ZONE_RETURN:
-                autoStep = AutoStep.ZONE_RETURN_TO_SHOOT;
-                robot.followPath(paths[5]);
+            case FLOW_1_INTAKE:
+                autoStep = AutoStep.FLOW_1_RETURN;
+                robot.followPathAndIntakeFor(paths[5], RETURN_INTAKE_MS);
                 break;
 
-            case ZONE_RETURN_TO_SHOOT:
-                autoStep = AutoStep.ZONE_SHOOT;
+            case FLOW_1_RETURN:
+                autoStep = AutoStep.FLOW_1_SHOOT;
                 break;
 
-            case ZONE_SHOOT:
-                autoStep = AutoStep.ZONE_FEED;
+            case FLOW_1_SHOOT:
+                autoStep = AutoStep.FLOW_1_FEED;
                 robot.transferFor(SHOOT_MS);
                 break;
 
-            case ZONE_FEED:
-                autoStep = AutoStep.OVERFLOW_INTAKE;
+            case FLOW_1_FEED:
+                autoStep = AutoStep.FLOW_2_INTAKE;
                 robot.followPathAndIntake(paths[6]);
                 break;
 
-            case OVERFLOW_INTAKE:
-                autoStep = AutoStep.OVERFLOW_RETURN;
-                robot.followPath(paths[7]);
+            case FLOW_2_INTAKE:
+                autoStep = AutoStep.FLOW_2_RETURN;
+                robot.followPathAndIntakeFor(paths[7], RETURN_INTAKE_MS);
                 break;
 
-            case OVERFLOW_RETURN:
-                autoStep = AutoStep.OVERFLOW_SHOOT;
+            case FLOW_2_RETURN:
+                autoStep = AutoStep.FLOW_2_SHOOT;
                 break;
 
-            case OVERFLOW_SHOOT:
-                autoStep = AutoStep.OVERFLOW_FEED;
+            case FLOW_2_SHOOT:
+                autoStep = AutoStep.FLOW_2_FEED;
                 robot.transferFor(SHOOT_MS);
                 break;
 
-            case OVERFLOW_FEED:
+            case FLOW_2_FEED:
                 autoStep = AutoStep.DONE;
                 break;
 
@@ -205,9 +232,10 @@ abstract class FarAuto extends OpMode {
 
     private boolean isWaitingForShooter() {
         return autoStep == AutoStep.PRELOAD_SHOOT
-                || autoStep == AutoStep.LINE_SHOOT
-                || autoStep == AutoStep.ZONE_SHOOT
-                || autoStep == AutoStep.OVERFLOW_SHOOT;
+                || autoStep == AutoStep.SPIKE_SHOOT
+                || autoStep == AutoStep.HUMAN_PLAYER_SHOOT
+                || autoStep == AutoStep.FLOW_1_SHOOT
+                || autoStep == AutoStep.FLOW_2_SHOOT;
     }
 
     private void startFeedWhenShooterReady() {
@@ -236,6 +264,23 @@ abstract class FarAuto extends OpMode {
         Pose end = alliancePose(blueEnd);
         PathBuilder builder = robot.getFollower().pathBuilder()
                 .addPath(new BezierCurve(start, control, end))
+                .setTangentHeadingInterpolation();
+
+        if (reversed) {
+            builder = builder.setReversed();
+        }
+
+        return builder.build();
+    }
+
+    private PathChain tangentCurve(Pose blueStart, Pose blueControl1, Pose blueControl2,
+                                   Pose blueEnd, boolean reversed) {
+        Pose start = alliancePose(blueStart);
+        Pose control1 = alliancePose(blueControl1);
+        Pose control2 = alliancePose(blueControl2);
+        Pose end = alliancePose(blueEnd);
+        PathBuilder builder = robot.getFollower().pathBuilder()
+                .addPath(new BezierCurve(start, control1, control2, end))
                 .setTangentHeadingInterpolation();
 
         if (reversed) {

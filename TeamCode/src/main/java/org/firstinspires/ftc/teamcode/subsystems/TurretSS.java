@@ -24,6 +24,7 @@ public class TurretSS {
 
     // ── State ─────────────────────────────────────────────────────────────────
     private double  targetAngleRad       = 0.0; // absolute field-relative angle
+    private double  filteredTargetAngleRad = 0.0;
     private double  actualTargetAngleRad = 0.0; // robot-relative angle (CCW+, front=±180°)
     private double  robotHeadingRad      = 0.0; // stored for telemetry
     private double  turretFieldX         = 0.0; // actual turret pivot position on field
@@ -32,6 +33,7 @@ public class TurretSS {
     private double  filteredVelY         = 0.0;
     private double  filteredHeadingVel   = 0.0; // low-pass filtered angular velocity
     private boolean robotNeedToTurn      = false;
+    private boolean targetAngleInitialized = false;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public TurretSS(HardwareMap hwm, Telemetry telemetry,
@@ -89,6 +91,9 @@ public class TurretSS {
                                double robotHeadingVel,
                                double goalX,          double goalY) {
         robotHeadingRad = robotHeading;
+        if (robotVel == null) {
+            robotVel = new Vector(0, 0);
+        }
 
         // ── Angular velocity filter ───────────────────────────────────────────
         filteredHeadingVel = HEADING_VEL_FILTER_ALPHA * filteredHeadingVel
@@ -114,6 +119,7 @@ public class TurretSS {
 
         // ── Field-relative angle from turret pivot to goal ────────────────────
         targetAngleRad = Math.atan2(adjGoalY - turretFieldY, adjGoalX - turretFieldX);
+        filteredTargetAngleRad = smoothAngle(filteredTargetAngleRad, targetAngleRad);
 
         // ── Convert to robot-relative with heading prediction ─────────────────
         // Lead the heading by lookahead × angular velocity to compensate
@@ -122,13 +128,18 @@ public class TurretSS {
                 + filteredHeadingVel * HEADING_VEL_LOOKAHEAD_SEC;
 
         actualTargetAngleRad = normalizeAngle(
-                targetAngleRad - predictedHeading + Math.PI
+                filteredTargetAngleRad - predictedHeading + Math.PI
         );
 
         // ── Servo output (CW+, so negate CCW+ math angle) ─────────────────────
         double targetDeg = -Math.toDegrees(actualTargetAngleRad);
-        servoPos         = angleDegToServoPos(targetDeg);
-        robotNeedToTurn  = Math.abs(targetDeg) > maxSafeAngleDeg;
+        double targetServoPos = angleDegToServoPos(targetDeg);
+        double smoothedServoPos = SERVO_FILTER_ALPHA * servoPos
+                + (1.0 - SERVO_FILTER_ALPHA) * targetServoPos;
+        if (Math.abs(smoothedServoPos - servoPos) > SERVO_DEADBAND) {
+            servoPos = smoothedServoPos;
+        }
+        robotNeedToTurn  = targetDeg > maxSafeAngleDeg || targetDeg < minSafeAngleDeg;
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
@@ -142,9 +153,23 @@ public class TurretSS {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    public double getServoPos() {
+        return servoPos;
+    }
+
     private double angleDegToServoPos(double angleDeg) {
         double pos = (angleDeg - minAngleDeg) / (maxAngleDeg - minAngleDeg);
         return Range.clip(pos, 0.0, 1.0);
+    }
+
+    private double smoothAngle(double current, double target) {
+        if (!targetAngleInitialized) {
+            targetAngleInitialized = true;
+            return target;
+        }
+
+        double delta = normalizeAngle(target - current);
+        return normalizeAngle(current + (1.0 - TARGET_ANGLE_FILTER_ALPHA) * delta);
     }
 
     private static double normalizeAngle(double rad) {

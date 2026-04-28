@@ -1,52 +1,59 @@
 package org.firstinspires.ftc.teamcode.robot;
 
+import com.bylazar.configurables.annotations.Configurable;
+
+@Configurable
 public class RobotConstants {
 
-    // ── Drivetrain ────────────────────────────────────────────────────────────
-    public static final String FRONT_LEFT  = "frontLeft";
+    // Hardware names from the robot configuration.
+    public static final String FRONT_LEFT = "frontLeft";
     public static final String FRONT_RIGHT = "frontRight";
-    public static final String BACK_LEFT   = "backLeft";
-    public static final String BACK_RIGHT  = "backRight";
+    public static final String BACK_LEFT = "backLeft";
+    public static final String BACK_RIGHT = "backRight";
 
-    // ── Intake ────────────────────────────────────────────────────────────────
     public static final String INTAKE_MOTOR_1 = "intake1";
     public static final String INTAKE_MOTOR_2 = "intake2";
-    public static final String GATE_SERVO     = "gate";
-    public static final String INTAKE_LED     = "led1";
+    public static final String GATE_SERVO = "gate";
+    public static final String INTAKE_LED = "led1";
 
-    // ── Shooter ───────────────────────────────────────────────────────────────
     public static final String SHOOTER_MOTOR_1 = "shooter1";
     public static final String SHOOTER_MOTOR_2 = "shooter2";
-    public static final String HOOD_SERVO      = "hood";
-    public static final String SHOOTER_LED     = "led2";
+    public static final String HOOD_SERVO = "hood";
+    public static final String SHOOTER_LED = "led2";
 
-    // ── Turret ────────────────────────────────────────────────────────────────
     public static final String TURRET_SERVO_1 = "turret1";
     public static final String TURRET_SERVO_2 = "turret2";
 
-    // ── PTO ───────────────────────────────────────────────────────────────────
     public static final String PTO_SERVO = "pto";
 
-    // ── Drive tuning ──────────────────────────────────────────────────────────
-    public static final double DRIVE_SPEED_MULTIPLIER = 1.0; // reduce to slow robot
-    public static final double TURN_CORRECTION_POWER  = 0.4; // auto-rotate during transfer
+    // Multiplies teleop drive input. Raise for faster driver control.
+    public static final double DRIVE_SPEED_MULTIPLIER = 1.25;
+    // Auto-turn power used while transferring if the turret is outside safe range.
+    public static final double TURN_CORRECTION_POWER = 0.4;
 
-    // ── Starting poses ────────────────────────────────────────────────────────
-    public static final double START_X_RED  = 8.25;
-    public static final double START_Y_RED  = 8.5;
-    public static final double START_H_RED  = 0.0;
+    // Default red start pose if an opmode uses constants instead of saved pose.
+    public static final double START_X_RED = 8.25;
+    public static final double START_Y_RED = 8.5;
+    public static final double START_H_RED = 0.0;
 
+    // Default blue start pose if an opmode uses constants instead of saved pose.
     public static final double START_X_BLUE = 135.75;
     public static final double START_Y_BLUE = 8.5;
     public static final double START_H_BLUE = Math.PI;
 
-    // ── Goal positions ────────────────────────────────────────────────────────
-    public static final double GOAL_X_RED  = 142.0;
-    public static final double GOAL_Y_RED  = 144.0;
-    public static final double GOAL_X_BLUE = 2.0;
-    public static final double GOAL_Y_BLUE = 144.0;
+    // Turret aim point. Change these if shots are left/right but flywheel speed is good.
+    public static double AIM_GOAL_X_RED = 132.0;
+    public static double AIM_GOAL_Y_RED = 132.0;
+    public static double AIM_GOAL_X_BLUE = 12.0;
+    public static double AIM_GOAL_Y_BLUE = 132.0;
 
-    // ── Headings ──────────────────────────────────────────────────────────────
-    public static final double HEADING_RED  = 0.0;
+    // Flywheel/hood distance point. Change these if RPM/hood distance calculation is off.
+    public static double SHOOTING_GOAL_X_RED = 144.0;
+    public static double SHOOTING_GOAL_Y_RED = 144.0;
+    public static double SHOOTING_GOAL_X_BLUE = 0.0;
+    public static double SHOOTING_GOAL_Y_BLUE = 144.0;
+
+    // Field-centric teleop heading offsets.
+    public static final double HEADING_RED = 0.0;
     public static final double HEADING_BLUE = Math.PI;
 }
