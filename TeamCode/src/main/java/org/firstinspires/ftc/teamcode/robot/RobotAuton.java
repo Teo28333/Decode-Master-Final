@@ -296,6 +296,21 @@ public class RobotAuton {
     public Follower getFollower()    { return follower;                   }
     public boolean  isBlueAlliance() { return isBlueAlliance;             }
 
+    public void forceIdle() {
+        follower.breakFollowing();
+        intakeCommands.idle();
+        currentState = State.IDLE;
+        pathIntakeTimeoutMs = -1.0;
+    }
+
+    public double getPathProgressPercent() {
+        if (!follower.isBusy()) {
+            return 100.0;
+        }
+
+        return Math.max(0.0, Math.min(100.0, follower.getPathCompletion() * 100.0));
+    }
+
     public void savePose() {
         PoseStorage.setCurrentPose(follower.getPose());
     }

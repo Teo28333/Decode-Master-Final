@@ -15,6 +15,7 @@ import com.pedropathing.util.PoseHistory;
 
 import org.firstinspires.ftc.teamcode.subsystems.ShooterSS;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSS;
+import org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.IntakeConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.PtoConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.ShooterConstants;
@@ -47,6 +48,7 @@ public final class PanelsDebug {
         PanelsConfigurables.INSTANCE.refreshClass(new PtoConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new IntakeConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new RobotConstants());
+        PanelsConfigurables.INSTANCE.refreshClass(new AutoConstants());
 
         initialized = true;
     }

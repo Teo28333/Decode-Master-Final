@@ -52,8 +52,4 @@ public class RobotConstants {
     public static double SHOOTING_GOAL_Y_RED = 144.0;
     public static double SHOOTING_GOAL_X_BLUE = 0.0;
     public static double SHOOTING_GOAL_Y_BLUE = 144.0;
-
-    // Field-centric teleop heading offsets.
-    public static final double HEADING_RED = 0.0;
-    public static final double HEADING_BLUE = Math.PI;
 }

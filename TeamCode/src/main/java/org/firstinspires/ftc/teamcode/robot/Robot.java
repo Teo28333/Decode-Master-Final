@@ -43,6 +43,8 @@ public class Robot {
     private boolean lastIntake    = false;
     private boolean lastLift      = false;
     private boolean lastDisengage = false;
+    private boolean lastPoseResetStart = false;
+    private boolean lastPoseResetCenter = false;
     private boolean isInTuning;
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -70,6 +72,10 @@ public class Robot {
 
     // ── Robot start ───────────────────────────────────────────────────────────
     public void start() {
+        if (!PoseStorage.hasValidPose()) {
+            PoseStorage.setCurrentPose(PoseStorage.allianceStartPose(isBlueAlliance));
+        }
+
         follower.setStartingPose(PoseStorage.currentPose);
         follower.setMaxPower(RobotConstants.DRIVE_SPEED_MULTIPLIER);
         follower.startTeleopDrive();
@@ -120,6 +126,14 @@ public class Robot {
         boolean intakePressed    = gamepad1.right_bumper && !lastIntake;
         boolean liftPressed      = gamepad1.y            && !lastLift;
         boolean disengagePressed = gamepad1.left_bumper  && !lastDisengage;
+        boolean resetCenterPressed = gamepad1.dpad_up && !lastPoseResetCenter;
+        boolean resetStartPressed = gamepad1.dpad_down && !lastPoseResetStart;
+
+        if (resetCenterPressed) {
+            resetPose(PoseStorage.fieldCenterPose());
+        } else if (resetStartPressed) {
+            resetPose(PoseStorage.allianceStartPose(isBlueAlliance));
+        }
 
         // ── Intake (toggle on right bumper) ───────────────────────────────────
         if (intakePressed) {
@@ -149,6 +163,8 @@ public class Robot {
         lastIntake    = gamepad1.right_bumper;
         lastLift      = gamepad1.y;
         lastDisengage = gamepad1.left_bumper;
+        lastPoseResetCenter = gamepad1.dpad_up;
+        lastPoseResetStart = gamepad1.dpad_down;
 
         // ── Command updates ───────────────────────────────────────────────────
         intakeCommands.update(
@@ -169,6 +185,13 @@ public class Robot {
     // ── Getters ───────────────────────────────────────────────────────────────
     public Follower getFollower()    { return follower;        }
     public boolean  isBlueAlliance() { return isBlueAlliance;  }
+
+    private void resetPose(Pose pose) {
+        if (PoseStorage.isValid(pose)) {
+            follower.setPose(pose);
+            PoseStorage.setCurrentPose(pose);
+        }
+    }
 
     private double aimGoalX() {
         return isBlueAlliance ? RobotConstants.AIM_GOAL_X_BLUE : RobotConstants.AIM_GOAL_X_RED;

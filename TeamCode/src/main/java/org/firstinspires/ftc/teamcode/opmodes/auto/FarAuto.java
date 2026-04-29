@@ -1,27 +1,22 @@
 package org.firstinspires.ftc.teamcode.opmodes.auto;
 
+import static org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants.*;
+
 import com.pedropathing.geometry.BezierCurve;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.paths.PathBuilder;
 import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.robot.RobotAuton;
 
 abstract class FarAuto extends OpMode {
-    private static final double FIELD_SIZE = 144.0;
-    private static final double PRELOAD_SPIN_UP_MS = 2250.0;
-    private static final double PRELOAD_SHOOT_MS = 1000.0;
-    private static final double SHOOT_MS = 1000.0;
-    private static final double HUMAN_PLAYER_CONFIRM_INTAKE_MS = 1000.0;
-    private static final double RETURN_INTAKE_MS = 250.0;
-
     private RobotAuton robot;
     private PathChain[] paths;
-    private final ElapsedTime stepTimer = new ElapsedTime();
-    private AutoStep autoStep = AutoStep.PRELOAD_SPIN_UP;
+    private final AutoStateMachine<AutoStep> autoState = new AutoStateMachine<>(AutoStep.PRELOAD_SPIN_UP);
+    private boolean dryRun = false;
+    private boolean lastX = false;
 
     private enum AutoStep {
         PRELOAD_SPIN_UP,
@@ -62,34 +57,50 @@ abstract class FarAuto extends OpMode {
 
     @Override
     public void init_loop() {
+        boolean xPressed = gamepad1.x && !lastX;
+        if (xPressed) {
+            dryRun = !dryRun;
+        }
+        lastX = gamepad1.x;
+
         telemetry.addLine(opModeName() + " ready");
-        telemetry.addData("Step", autoStep);
+        telemetry.addData("Step", autoState.getStep());
+        telemetry.addData("Dry run", dryRun);
+        telemetry.addData("Path timeout ms", PATH_STEP_TIMEOUT_MS);
+        telemetry.addData("Shooter timeout ms", SHOOTER_WAIT_TIMEOUT_MS);
         telemetry.update();
     }
 
     @Override
     public void start() {
-        autoStep = AutoStep.PRELOAD_SPIN_UP;
-        stepTimer.reset();
+        autoState.setStep(AutoStep.PRELOAD_SPIN_UP);
     }
 
     @Override
     public void loop() {
         robot.update();
 
-        if (autoStep == AutoStep.PRELOAD_SPIN_UP) {
-            if (stepTimer.milliseconds() >= PRELOAD_SPIN_UP_MS && robot.isShooterReady()) {
-                autoStep = AutoStep.PRELOAD_SHOOT;
+        if (autoState.getStep() == AutoStep.PRELOAD_SPIN_UP) {
+            if (dryRun || (autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS && robot.isShooterReady())) {
+                setStep(AutoStep.PRELOAD_SHOOT);
+            } else if (autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS + SHOOTER_WAIT_TIMEOUT_MS) {
+                setStep(AutoStep.PRELOAD_SHOOT);
             }
         } else if (isWaitingForShooter()) {
             startFeedWhenShooterReady();
+        } else if (robot.isBusy() && autoState.elapsedMs() >= PATH_STEP_TIMEOUT_MS) {
+            robot.forceIdle();
+            startNextStep();
         } else if (!robot.isBusy()) {
             startNextStep();
         }
 
         Pose pose = robot.getFollower().getPose();
         telemetry.addData("Auto", opModeName());
-        telemetry.addData("Step", autoStep);
+        telemetry.addData("Step", autoState.getStep());
+        telemetry.addData("Step time ms", "%.0f", autoState.elapsedMs());
+        telemetry.addData("Path progress %%", "%.1f", robot.getPathProgressPercent());
+        telemetry.addData("Dry run", dryRun);
         telemetry.addData("Pose", "%.1f, %.1f, %.1f", pose.getX(), pose.getY(), Math.toDegrees(pose.getHeading()));
         telemetry.update();
     }
@@ -105,141 +116,140 @@ abstract class FarAuto extends OpMode {
         paths = new PathChain[] {
                 tangentCurve(
                         startingPose,
-                        new Pose(54.213, 28.075),
-                        new Pose(32.267, 38.760),
+                        new Pose(53.163, 28.075),
+                        new Pose(34.716, 37.360),
                         new Pose(15.000, 36.000),
                         false
                 ),
-                tangentLine(new Pose(15.000, 36.000), new Pose(51.863, 13.768), true),
-                tangentLine(new Pose(51.863, 13.768), new Pose(10.000, 9.500), false),
-                tangentLine(new Pose(10.000, 9.500), new Pose(48.000, 9.000), true),
+                tangentLine(new Pose(15.000, 36.000), new Pose(52.913, 17.267), true),
+                tangentLine(new Pose(52.913, 17.267), new Pose(10.000, 10.050), false),
+                tangentLine(new Pose(10.000, 10.050), new Pose(52.549, 13.899), true),
                 tangentCurve(
-                        new Pose(48.000, 9.000),
+                        new Pose(52.549, 13.899),
                         new Pose(44.076, 31.476),
-                        new Pose(34.878, 44.499),
-                        new Pose(10.000, 44.253),
+                        new Pose(39.427, 39.250),
+                        new Pose(10.000, 38.129),
                         false
                 ),
-                tangentLine(new Pose(10.000, 44.253), new Pose(53.000, 17.000), true),
+                tangentLine(new Pose(10.000, 38.129), new Pose(53.000, 17.000), true),
                 tangentLine(new Pose(53.000, 17.000), new Pose(10.000, 10.000), false),
-                tangentLine(new Pose(10.000, 10.000), new Pose(48.000, 10.000), true)
+                tangentLine(new Pose(10.000, 10.000), new Pose(48.350, 10.700), true)
         };
 
         return alliancePose(startingPose);
     }
 
     private void startNextStep() {
-        switch (autoStep) {
+        switch (autoState.getStep()) {
             case PRELOAD_SHOOT:
-                autoStep = AutoStep.PRELOAD_FEED;
-                robot.transferFor(PRELOAD_SHOOT_MS);
+                startTransfer(AutoStep.PRELOAD_FEED, FAR_PRELOAD_SHOOT_MS);
                 break;
 
             case PRELOAD_FEED:
-                autoStep = AutoStep.SPIKE_INTAKE;
-                robot.followPathAndIntake(paths[0]);
+                setStep(AutoStep.SPIKE_INTAKE);
+                followIntakePath(paths[0]);
                 break;
 
             case SPIKE_INTAKE:
-                autoStep = AutoStep.SPIKE_RETURN;
-                robot.followPathAndIntakeFor(paths[1], RETURN_INTAKE_MS);
+                setStep(AutoStep.SPIKE_RETURN);
+                followReturnPath(paths[1]);
                 break;
 
             case SPIKE_RETURN:
-                autoStep = AutoStep.SPIKE_SHOOT;
+                setStep(AutoStep.SPIKE_SHOOT);
                 break;
 
             case SPIKE_SHOOT:
-                autoStep = AutoStep.SPIKE_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.SPIKE_FEED, FAR_SHOOT_MS);
                 break;
 
             case SPIKE_FEED:
-                autoStep = AutoStep.HUMAN_PLAYER_INTAKE;
-                robot.followPathAndIntake(paths[2]);
+                setStep(AutoStep.HUMAN_PLAYER_INTAKE);
+                followIntakePath(paths[2]);
                 break;
 
             case HUMAN_PLAYER_INTAKE:
-                autoStep = AutoStep.HUMAN_PLAYER_CONFIRM_INTAKE;
-                robot.intakeFor(HUMAN_PLAYER_CONFIRM_INTAKE_MS);
+                setStep(AutoStep.HUMAN_PLAYER_CONFIRM_INTAKE);
+                intakeFor(FAR_HUMAN_PLAYER_CONFIRM_INTAKE_MS);
                 break;
 
             case HUMAN_PLAYER_CONFIRM_INTAKE:
-                autoStep = AutoStep.HUMAN_PLAYER_RETURN;
-                robot.followPathAndIntakeFor(paths[3], RETURN_INTAKE_MS);
+                setStep(AutoStep.HUMAN_PLAYER_RETURN);
+                followReturnPath(paths[3]);
                 break;
 
             case HUMAN_PLAYER_RETURN:
-                autoStep = AutoStep.HUMAN_PLAYER_SHOOT;
+                setStep(AutoStep.HUMAN_PLAYER_SHOOT);
                 break;
 
             case HUMAN_PLAYER_SHOOT:
-                autoStep = AutoStep.HUMAN_PLAYER_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.HUMAN_PLAYER_FEED, FAR_SHOOT_MS);
                 break;
 
             case HUMAN_PLAYER_FEED:
-                autoStep = AutoStep.FLOW_1_INTAKE;
-                robot.followPathAndIntake(paths[4]);
+                setStep(AutoStep.FLOW_1_INTAKE);
+                followIntakePath(paths[4]);
                 break;
 
             case FLOW_1_INTAKE:
-                autoStep = AutoStep.FLOW_1_RETURN;
-                robot.followPathAndIntakeFor(paths[5], RETURN_INTAKE_MS);
+                setStep(AutoStep.FLOW_1_RETURN);
+                followReturnPath(paths[5]);
                 break;
 
             case FLOW_1_RETURN:
-                autoStep = AutoStep.FLOW_1_SHOOT;
+                setStep(AutoStep.FLOW_1_SHOOT);
                 break;
 
             case FLOW_1_SHOOT:
-                autoStep = AutoStep.FLOW_1_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.FLOW_1_FEED, FAR_SHOOT_MS);
                 break;
 
             case FLOW_1_FEED:
-                autoStep = AutoStep.FLOW_2_INTAKE;
-                robot.followPathAndIntake(paths[6]);
+                setStep(AutoStep.FLOW_2_INTAKE);
+                followIntakePath(paths[6]);
                 break;
 
             case FLOW_2_INTAKE:
-                autoStep = AutoStep.FLOW_2_RETURN;
-                robot.followPathAndIntakeFor(paths[7], RETURN_INTAKE_MS);
+                setStep(AutoStep.FLOW_2_RETURN);
+                followReturnPath(paths[7]);
                 break;
 
             case FLOW_2_RETURN:
-                autoStep = AutoStep.FLOW_2_SHOOT;
+                setStep(AutoStep.FLOW_2_SHOOT);
                 break;
 
             case FLOW_2_SHOOT:
-                autoStep = AutoStep.FLOW_2_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.FLOW_2_FEED, FAR_SHOOT_MS);
                 break;
 
             case FLOW_2_FEED:
-                autoStep = AutoStep.DONE;
+                setStep(AutoStep.DONE);
                 break;
 
             case DONE:
-                autoStep = AutoStep.DONE;
+                setStep(AutoStep.DONE);
                 break;
 
             default:
-                autoStep = AutoStep.DONE;
+                setStep(AutoStep.DONE);
                 break;
         }
     }
 
     private boolean isWaitingForShooter() {
-        return autoStep == AutoStep.PRELOAD_SHOOT
-                || autoStep == AutoStep.SPIKE_SHOOT
-                || autoStep == AutoStep.HUMAN_PLAYER_SHOOT
-                || autoStep == AutoStep.FLOW_1_SHOOT
-                || autoStep == AutoStep.FLOW_2_SHOOT;
+        if (dryRun) {
+            return false;
+        }
+
+        return autoState.getStep() == AutoStep.PRELOAD_SHOOT
+                || autoState.getStep() == AutoStep.SPIKE_SHOOT
+                || autoState.getStep() == AutoStep.HUMAN_PLAYER_SHOOT
+                || autoState.getStep() == AutoStep.FLOW_1_SHOOT
+                || autoState.getStep() == AutoStep.FLOW_2_SHOOT;
     }
 
     private void startFeedWhenShooterReady() {
-        if (robot.isShooterReady()) {
+        if (robot.isShooterReady() || autoState.elapsedMs() >= SHOOTER_WAIT_TIMEOUT_MS) {
             startNextStep();
         }
     }
@@ -291,19 +301,40 @@ abstract class FarAuto extends OpMode {
     }
 
     private Pose alliancePose(Pose bluePose) {
-        if (isBlueAlliance()) {
-            return bluePose;
+        return AllianceUtil.mirrorForAlliance(bluePose, isBlueAlliance());
+    }
+
+    private void setStep(AutoStep step) {
+        autoState.setStep(step);
+    }
+
+    private void startTransfer(AutoStep nextStep, double timeoutMs) {
+        setStep(nextStep);
+        if (!dryRun) {
+            robot.transferFor(timeoutMs);
         }
-
-        return new Pose(FIELD_SIZE - bluePose.getX(), bluePose.getY(), Math.PI - bluePose.getHeading());
     }
 
-    private Pose withHeading(Pose pose, double heading) {
-        return new Pose(pose.getX(), pose.getY(), heading);
+    private void followIntakePath(PathChain path) {
+        if (dryRun) {
+            robot.followPath(path);
+        } else {
+            robot.followPathAndIntake(path);
+        }
     }
 
-    private double headingTo(Pose start, Pose end) {
-        return Math.atan2(end.getY() - start.getY(), end.getX() - start.getX());
+    private void followReturnPath(PathChain path) {
+        if (dryRun) {
+            robot.followPath(path);
+        } else {
+            robot.followPathAndIntakeFor(path, FAR_RETURN_INTAKE_MS);
+        }
+    }
+
+    private void intakeFor(double timeoutMs) {
+        if (!dryRun) {
+            robot.intakeFor(timeoutMs);
+        }
     }
 
     private String opModeName() {

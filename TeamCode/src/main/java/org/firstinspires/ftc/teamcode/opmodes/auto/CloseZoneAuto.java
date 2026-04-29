@@ -1,25 +1,25 @@
 package org.firstinspires.ftc.teamcode.opmodes.auto;
 
+import static org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants.*;
+
 import com.pedropathing.geometry.BezierCurve;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.robot.RobotAuton;
 
 abstract class CloseZoneAuto extends OpMode {
-    private static final double FIELD_SIZE = 144.0;
-    private static final double PRELOAD_SHOOT_MS = 1000.0;
-    private static final double SHOOT_MS = 1000.0;
-    private static final double GATE_CONFIRM_INTAKE_MS = 1000.0;
-    private static final double RETURN_INTAKE_MS = 250.0;
-
     private RobotAuton robot;
     private Paths paths;
-    private final ElapsedTime stepTimer = new ElapsedTime();
-    private AutoStep autoStep = AutoStep.GO_TO_SHOOTING_POSE;
+    private final AutoStateMachine<AutoStep> autoState = new AutoStateMachine<>(AutoStep.GO_TO_SHOOTING_POSE);
+    private int selectedGateIntakes = CLOSE_DEFAULT_GATE_INTAKES;
+    private int gateIntakeCycle = 0;
+    private boolean dryRun = false;
+    private boolean lastDpadUp = false;
+    private boolean lastDpadDown = false;
+    private boolean lastX = false;
 
     private enum AutoStep {
         GO_TO_SHOOTING_POSE,
@@ -34,21 +34,6 @@ abstract class CloseZoneAuto extends OpMode {
         GATE_RETURN,
         GATE_SHOOT,
         GATE_FEED,
-        GATE_2_INTAKE,
-        GATE_2_CONFIRM_INTAKE,
-        GATE_2_RETURN,
-        GATE_2_SHOOT,
-        GATE_2_FEED,
-        GATE_3_INTAKE,
-        GATE_3_CONFIRM_INTAKE,
-        GATE_3_RETURN,
-        GATE_3_SHOOT,
-        GATE_3_FEED,
-        GATE_4_INTAKE,
-        GATE_4_CONFIRM_INTAKE,
-        GATE_4_RETURN,
-        GATE_4_SHOOT,
-        GATE_4_FEED,
         RIGHT_INTAKE,
         RIGHT_RETURN,
         RIGHT_SHOOT,
@@ -72,16 +57,38 @@ abstract class CloseZoneAuto extends OpMode {
 
     @Override
     public void init_loop() {
+        boolean dpadUpPressed = gamepad1.dpad_up && !lastDpadUp;
+        boolean dpadDownPressed = gamepad1.dpad_down && !lastDpadDown;
+        boolean xPressed = gamepad1.x && !lastX;
+
+        if (dpadUpPressed) {
+            selectedGateIntakes = Math.min(CLOSE_MAX_GATE_INTAKES, selectedGateIntakes + 1);
+        }
+        if (dpadDownPressed) {
+            selectedGateIntakes = Math.max(CLOSE_MIN_GATE_INTAKES, selectedGateIntakes - 1);
+        }
+        if (xPressed) {
+            dryRun = !dryRun;
+        }
+
+        lastDpadUp = gamepad1.dpad_up;
+        lastDpadDown = gamepad1.dpad_down;
+        lastX = gamepad1.x;
+
         telemetry.addLine(opModeName() + " ready");
-        telemetry.addData("Step", autoStep);
+        telemetry.addData("Step", autoState.getStep());
+        telemetry.addData("Gate intakes", selectedGateIntakes);
+        telemetry.addData("Dry run", dryRun);
+        telemetry.addData("Path timeout ms", PATH_STEP_TIMEOUT_MS);
+        telemetry.addData("Shooter timeout ms", SHOOTER_WAIT_TIMEOUT_MS);
         telemetry.update();
     }
 
     @Override
     public void start() {
-        autoStep = AutoStep.GO_TO_SHOOTING_POSE;
+        autoState.setStep(AutoStep.GO_TO_SHOOTING_POSE);
+        gateIntakeCycle = 0;
         robot.followPath(paths.goToShootingPose);
-        stepTimer.reset();
     }
 
     @Override
@@ -90,13 +97,20 @@ abstract class CloseZoneAuto extends OpMode {
 
         if (isWaitingForShooter()) {
             startFeedWhenShooterReady();
+        } else if (robot.isBusy() && autoState.elapsedMs() >= PATH_STEP_TIMEOUT_MS) {
+            robot.forceIdle();
+            startNextStep();
         } else if (!robot.isBusy()) {
             startNextStep();
         }
 
         Pose pose = robot.getFollower().getPose();
         telemetry.addData("Auto", opModeName());
-        telemetry.addData("Step", autoStep);
+        telemetry.addData("Step", autoState.getStep());
+        telemetry.addData("Step time ms", "%.0f", autoState.elapsedMs());
+        telemetry.addData("Path progress %%", "%.1f", robot.getPathProgressPercent());
+        telemetry.addData("Gate intake cycle", "%d / %d", gateIntakeCycle, selectedGateIntakes);
+        telemetry.addData("Dry run", dryRun);
         telemetry.addData("Pose", "%.1f, %.1f, %.1f", pose.getX(), pose.getY(), Math.toDegrees(pose.getHeading()));
         telemetry.update();
     }
@@ -107,185 +121,146 @@ abstract class CloseZoneAuto extends OpMode {
     }
 
     private void startNextStep() {
-        switch (autoStep) {
+        switch (autoState.getStep()) {
             case GO_TO_SHOOTING_POSE:
-                autoStep = AutoStep.PRELOAD_SHOOT;
+                setStep(AutoStep.PRELOAD_SHOOT);
                 break;
 
             case PRELOAD_SHOOT:
-                autoStep = AutoStep.PRELOAD_FEED;
-                robot.transferFor(PRELOAD_SHOOT_MS);
+                startTransfer(AutoStep.PRELOAD_FEED, CLOSE_PRELOAD_SHOOT_MS);
                 break;
 
             case PRELOAD_FEED:
-                autoStep = AutoStep.MIDDLE_INTAKE;
-                robot.followPathAndIntake(paths.intakeMiddleLine);
+                setStep(AutoStep.MIDDLE_INTAKE);
+                followIntakePath(paths.intakeMiddleLine);
                 break;
 
             case MIDDLE_INTAKE:
-                autoStep = AutoStep.MIDDLE_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose2, RETURN_INTAKE_MS);
+                setStep(AutoStep.MIDDLE_RETURN);
+                followReturnPath(paths.goToShootingPose2);
                 break;
 
             case MIDDLE_RETURN:
-                autoStep = AutoStep.MIDDLE_SHOOT;
+                setStep(AutoStep.MIDDLE_SHOOT);
                 break;
 
             case MIDDLE_SHOOT:
-                autoStep = AutoStep.MIDDLE_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.MIDDLE_FEED, CLOSE_SHOOT_MS);
                 break;
 
             case MIDDLE_FEED:
-                autoStep = AutoStep.GATE_INTAKE;
-                robot.followPathAndIntake(paths.gateIntake1);
+                setStep(AutoStep.GATE_INTAKE);
+                gateIntakeCycle = 1;
+                followIntakePath(paths.gateIntake1);
                 break;
 
             case GATE_INTAKE:
-                autoStep = AutoStep.GATE_CONFIRM_INTAKE;
-                robot.intakeFor(GATE_CONFIRM_INTAKE_MS);
+                setStep(AutoStep.GATE_CONFIRM_INTAKE);
+                intakeFor(CLOSE_GATE_CONFIRM_INTAKE_MS);
                 break;
 
             case GATE_CONFIRM_INTAKE:
-                autoStep = AutoStep.GATE_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose3, RETURN_INTAKE_MS);
+                setStep(AutoStep.GATE_RETURN);
+                followReturnPath(paths.goToShootingPose3);
                 break;
 
             case GATE_RETURN:
-                autoStep = AutoStep.GATE_SHOOT;
+                setStep(AutoStep.GATE_SHOOT);
                 break;
 
             case GATE_SHOOT:
-                autoStep = AutoStep.GATE_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.GATE_FEED, CLOSE_SHOOT_MS);
                 break;
 
             case GATE_FEED:
-                autoStep = AutoStep.GATE_2_INTAKE;
-                robot.followPathAndIntake(paths.gateIntake1);
-                break;
-
-            case GATE_2_INTAKE:
-                autoStep = AutoStep.GATE_2_CONFIRM_INTAKE;
-                robot.intakeFor(GATE_CONFIRM_INTAKE_MS);
-                break;
-
-            case GATE_2_CONFIRM_INTAKE:
-                autoStep = AutoStep.GATE_2_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose3, RETURN_INTAKE_MS);
-                break;
-
-            case GATE_2_RETURN:
-                autoStep = AutoStep.GATE_2_SHOOT;
-                break;
-
-            case GATE_2_SHOOT:
-                autoStep = AutoStep.GATE_2_FEED;
-                robot.transferFor(SHOOT_MS);
-                break;
-
-            case GATE_2_FEED:
-                autoStep = AutoStep.GATE_3_INTAKE;
-                robot.followPathAndIntake(paths.gateIntake1);
-                break;
-
-            case GATE_3_INTAKE:
-                autoStep = AutoStep.GATE_3_CONFIRM_INTAKE;
-                robot.intakeFor(GATE_CONFIRM_INTAKE_MS);
-                break;
-
-            case GATE_3_CONFIRM_INTAKE:
-                autoStep = AutoStep.GATE_3_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose3, RETURN_INTAKE_MS);
-                break;
-
-            case GATE_3_RETURN:
-                autoStep = AutoStep.GATE_3_SHOOT;
-                break;
-
-            case GATE_3_SHOOT:
-                autoStep = AutoStep.GATE_3_FEED;
-                robot.transferFor(SHOOT_MS);
-                break;
-
-            case GATE_3_FEED:
-                autoStep = AutoStep.GATE_4_INTAKE;
-                robot.followPathAndIntake(paths.gateIntake1);
-                break;
-
-            case GATE_4_INTAKE:
-                autoStep = AutoStep.GATE_4_CONFIRM_INTAKE;
-                robot.intakeFor(GATE_CONFIRM_INTAKE_MS);
-                break;
-
-            case GATE_4_CONFIRM_INTAKE:
-                autoStep = AutoStep.GATE_4_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose3, RETURN_INTAKE_MS);
-                break;
-
-            case GATE_4_RETURN:
-                autoStep = AutoStep.GATE_4_SHOOT;
-                break;
-
-            case GATE_4_SHOOT:
-                autoStep = AutoStep.GATE_4_FEED;
-                robot.transferFor(SHOOT_MS);
-                break;
-
-            case GATE_4_FEED:
-                autoStep = AutoStep.RIGHT_INTAKE;
-                robot.followPathAndIntake(paths.intakeRightLine);
+                if (gateIntakeCycle < selectedGateIntakes) {
+                    gateIntakeCycle++;
+                    setStep(AutoStep.GATE_INTAKE);
+                    followIntakePath(paths.gateIntake1);
+                } else {
+                    setStep(AutoStep.RIGHT_INTAKE);
+                    followIntakePath(paths.intakeRightLine);
+                }
                 break;
 
             case RIGHT_INTAKE:
-                autoStep = AutoStep.RIGHT_RETURN;
-                robot.followPathAndIntakeFor(paths.goToShootingPose4, RETURN_INTAKE_MS);
+                setStep(AutoStep.RIGHT_RETURN);
+                followReturnPath(paths.goToShootingPose4);
                 break;
 
             case RIGHT_RETURN:
-                autoStep = AutoStep.RIGHT_SHOOT;
+                setStep(AutoStep.RIGHT_SHOOT);
                 break;
 
             case RIGHT_SHOOT:
-                autoStep = AutoStep.RIGHT_FEED;
-                robot.transferFor(SHOOT_MS);
+                startTransfer(AutoStep.RIGHT_FEED, CLOSE_SHOOT_MS);
                 break;
 
             case RIGHT_FEED:
-                autoStep = AutoStep.LEAVING_ZONE;
+                setStep(AutoStep.LEAVING_ZONE);
                 robot.followPath(paths.leavingZone);
                 break;
 
             case LEAVING_ZONE:
             case DONE:
             default:
-                autoStep = AutoStep.DONE;
+                setStep(AutoStep.DONE);
                 break;
         }
     }
 
     private boolean isWaitingForShooter() {
-        return autoStep == AutoStep.PRELOAD_SHOOT
-                || autoStep == AutoStep.MIDDLE_SHOOT
-                || autoStep == AutoStep.GATE_SHOOT
-                || autoStep == AutoStep.GATE_2_SHOOT
-                || autoStep == AutoStep.GATE_3_SHOOT
-                || autoStep == AutoStep.GATE_4_SHOOT
-                || autoStep == AutoStep.RIGHT_SHOOT;
+        if (dryRun) {
+            return false;
+        }
+
+        return autoState.getStep() == AutoStep.PRELOAD_SHOOT
+                || autoState.getStep() == AutoStep.MIDDLE_SHOOT
+                || autoState.getStep() == AutoStep.GATE_SHOOT
+                || autoState.getStep() == AutoStep.RIGHT_SHOOT;
     }
 
     private void startFeedWhenShooterReady() {
-        if (robot.isShooterReady()) {
+        if (robot.isShooterReady() || autoState.elapsedMs() >= SHOOTER_WAIT_TIMEOUT_MS) {
             startNextStep();
         }
     }
 
     private Pose alliancePose(Pose bluePose) {
-        if (isBlueAlliance()) {
-            return bluePose;
-        }
+        return AllianceUtil.mirrorForAlliance(bluePose, isBlueAlliance());
+    }
 
-        return new Pose(FIELD_SIZE - bluePose.getX(), bluePose.getY(), Math.PI - bluePose.getHeading());
+    private void setStep(AutoStep step) {
+        autoState.setStep(step);
+    }
+
+    private void startTransfer(AutoStep nextStep, double timeoutMs) {
+        setStep(nextStep);
+        if (!dryRun) {
+            robot.transferFor(timeoutMs);
+        }
+    }
+
+    private void followIntakePath(PathChain path) {
+        if (dryRun) {
+            robot.followPath(path);
+        } else {
+            robot.followPathAndIntake(path);
+        }
+    }
+
+    private void followReturnPath(PathChain path) {
+        if (dryRun) {
+            robot.followPath(path);
+        } else {
+            robot.followPathAndIntakeFor(path, CLOSE_RETURN_INTAKE_MS);
+        }
+    }
+
+    private void intakeFor(double timeoutMs) {
+        if (!dryRun) {
+            robot.intakeFor(timeoutMs);
+        }
     }
 
     private String opModeName() {
