@@ -24,12 +24,18 @@ public class RobotConstants {
     public static final String TURRET_SERVO_1 = "turret1";
     public static final String TURRET_SERVO_2 = "turret2";
 
-    public static final String PTO_SERVO = "pto";
-
     // Multiplies teleop drive input. Raise for faster driver control.
     public static final double DRIVE_SPEED_MULTIPLIER = 1.25;
     // Auto-turn power used while transferring if the turret is outside safe range.
     public static final double TURN_CORRECTION_POWER = 0.4;
+    // Servo position used when the turret fail-safe is enabled.
+    public static double TURRET_FAILSAFE_SERVO_POS = 0.0;
+    // Max robot turn command while aiming with robot heading in turret fail-safe.
+    public static double TURRET_FAILSAFE_MAX_TURN_POWER = 0.55;
+    // Heading error allowed before transfer considers fail-safe robot aim ready.
+    public static double TURRET_FAILSAFE_AIM_TOLERANCE_RAD = Math.toRadians(2.0);
+    // Tune this if the fixed turret fail-safe position is not perfectly aligned with robot heading.
+    public static double TURRET_FAILSAFE_HEADING_OFFSET_RAD = 0.0;
 
     // Default red start pose if an opmode uses constants instead of saved pose.
     public static final double START_X_RED = 8.25;

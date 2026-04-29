@@ -142,6 +142,16 @@ public class TurretSS {
         robotNeedToTurn  = targetDeg > maxSafeAngleDeg || targetDeg < minSafeAngleDeg;
     }
 
+    public void failsafeParkCMD(double parkedServoPos) {
+        servoPos = Range.clip(parkedServoPos, 0.0, 1.0);
+        actualTargetAngleRad = 0.0;
+        robotNeedToTurn = false;
+        targetAngleInitialized = false;
+        filteredVelX = 0.0;
+        filteredVelY = 0.0;
+        filteredHeadingVel = 0.0;
+    }
+
     // ── Getters ───────────────────────────────────────────────────────────────
     public boolean robotNeedToTurn() {
         return robotNeedToTurn;

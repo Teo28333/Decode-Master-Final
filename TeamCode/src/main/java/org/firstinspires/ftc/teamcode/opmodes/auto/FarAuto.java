@@ -47,7 +47,6 @@ abstract class FarAuto extends OpMode {
     @Override
     public void init() {
         robot = new RobotAuton(hardwareMap, telemetry, isBlueAlliance());
-        robot.disengagePto();
         Pose startPose = buildPaths();
         robot.start(startPose);
 

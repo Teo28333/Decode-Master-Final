@@ -17,7 +17,6 @@ import org.firstinspires.ftc.teamcode.subsystems.ShooterSS;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSS;
 import org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.IntakeConstants;
-import org.firstinspires.ftc.teamcode.subsystems.constant.PtoConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.ShooterConstants;
 import org.firstinspires.ftc.teamcode.subsystems.constant.TurretConstants;
 
@@ -45,7 +44,6 @@ public final class PanelsDebug {
         panelsField.setOffsets(PanelsField.INSTANCE.getPresets().getPEDRO_PATHING());
         PanelsConfigurables.INSTANCE.refreshClass(new ShooterConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new TurretConstants());
-        PanelsConfigurables.INSTANCE.refreshClass(new PtoConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new IntakeConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new RobotConstants());
         PanelsConfigurables.INSTANCE.refreshClass(new AutoConstants());
@@ -80,10 +78,6 @@ public final class PanelsDebug {
         panelsTelemetry.addData("Shooter kD", ShooterConstants.kD);
         panelsTelemetry.addData("Shooter kF", ShooterConstants.kF);
         panelsTelemetry.addData("Shooter kS", ShooterConstants.kS);
-        panelsTelemetry.addData("PTO kP", PtoConstants.kP);
-        panelsTelemetry.addData("PTO kI", PtoConstants.kI);
-        panelsTelemetry.addData("PTO kD", PtoConstants.kD);
-        panelsTelemetry.addData("PTO kF", PtoConstants.kF);
 
         panelsTelemetry.addData("Turret Angle Deg", round(turret.getTurretAngleDeg()));
         panelsTelemetry.addData("Turret Servo Pos", round(turret.getServoPos()));

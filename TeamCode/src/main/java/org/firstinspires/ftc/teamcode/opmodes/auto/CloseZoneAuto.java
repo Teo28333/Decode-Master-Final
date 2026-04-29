@@ -47,7 +47,6 @@ abstract class CloseZoneAuto extends OpMode {
     @Override
     public void init() {
         robot = new RobotAuton(hardwareMap, telemetry, isBlueAlliance());
-        robot.disengagePto();
         paths = new Paths();
         robot.start(alliancePose(new Pose(18.603, 120.278, Math.toRadians(-40))));
 

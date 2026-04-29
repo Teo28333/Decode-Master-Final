@@ -1,32 +1,37 @@
 package org.firstinspires.ftc.teamcode.robot;
 
+import com.pedropathing.control.PIDFController;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.math.Vector;
 import com.qualcomm.robotcore.hardware.Gamepad;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.commands.IntakeCommands;
-import org.firstinspires.ftc.teamcode.commands.LiftCommands;
+import org.firstinspires.ftc.teamcode.math.ShooterEquation;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSS;
-import org.firstinspires.ftc.teamcode.subsystems.PtoSS;
 import org.firstinspires.ftc.teamcode.subsystems.ShooterSS;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSS;
+
+import static org.firstinspires.ftc.teamcode.subsystems.constant.TurretConstants.TURRET_OFFSET_X;
+import static org.firstinspires.ftc.teamcode.subsystems.constant.TurretConstants.TURRET_OFFSET_Y;
 
 public class Robot {
 
     // ── Subsystems ────────────────────────────────────────────────────────────
+    private final Telemetry telemetry;
     private final Follower  follower;
     private final IntakeSS  intake;
     private final ShooterSS shooter;
     private final TurretSS  turret;
-    private final PtoSS     pto;
+    private final PIDFController headingAimController;
+    private final ShooterEquation shooterEquation = new ShooterEquation();
 
     // ── Commands ──────────────────────────────────────────────────────────────
     private final IntakeCommands intakeCommands;
-    private final LiftCommands   liftCommands;
 
     // ── Alliance ──────────────────────────────────────────────────────────────
     private final boolean isBlueAlliance;
@@ -41,33 +46,31 @@ public class Robot {
 
     // ── Button edge detection ─────────────────────────────────────────────────
     private boolean lastIntake    = false;
-    private boolean lastLift      = false;
-    private boolean lastDisengage = false;
+    private boolean lastFailsafeToggle = false;
+    private boolean lastRobotAimToggle = false;
     private boolean lastPoseResetStart = false;
     private boolean lastPoseResetCenter = false;
+    private boolean turretFailsafeEnabled = false;
+    private boolean robotAimEnabled = false;
     private boolean isInTuning;
+    private double failsafeHeadingErrorRad = 0.0;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public Robot(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance, boolean tuning) {
+        this.telemetry      = telemetry;
         this.isBlueAlliance = isBlueAlliance;
         this.isInTuning     = tuning;
 
         follower = Constants.createFollower(hwm);
+        headingAimController = new PIDFController(Constants.followerConstants.getCoefficientsHeadingPIDF());
 
         intake  = new IntakeSS(hwm, telemetry, "intake1", "intake2", "gate", "led1");
         shooter = new ShooterSS(hwm, telemetry, "shooter1", "shooter2", "hood", "led2");
         turret  = new TurretSS(hwm, telemetry, "turret1", "turret2");
-        pto     = new PtoSS(hwm, telemetry, "pto",
-                "frontLeft", "frontRight", "backLeft", "backRight");
 
         intakeCommands = new IntakeCommands(intake);
-        liftCommands   = new LiftCommands(pto);
 
         PanelsDebug.init();
-
-        // Safety: force PTO disengaged at startup before any loop runs
-        pto.disengagePtoCMD();
-        pto.write();
     }
 
     // ── Robot start ───────────────────────────────────────────────────────────
@@ -86,6 +89,18 @@ public class Robot {
 
         shooter.setTuningMode(isInTuning);
 
+        boolean failsafeTogglePressed = gamepad1.share && !lastFailsafeToggle;
+        if (failsafeTogglePressed) {
+            turretFailsafeEnabled = !turretFailsafeEnabled;
+            robotAimEnabled = false;
+            headingAimController.reset();
+        }
+        boolean robotAimTogglePressed = turretFailsafeEnabled && gamepad1.y && !lastRobotAimToggle;
+        if (robotAimTogglePressed) {
+            robotAimEnabled = !robotAimEnabled;
+            headingAimController.reset();
+        }
+
         // ── Pose & velocity (needed before driving block) ─────────────────────
         Pose   pose     = follower.getPose();
         double robotX   = pose.getX();
@@ -94,8 +109,12 @@ public class Robot {
         Vector robotVel = follower.getVelocity();
 
         // ── Turret & shooter (before driving so robotNeedToTurn is fresh) ──────
-        turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(),
-                aimGoalX(), aimGoalY());
+        if (turretFailsafeEnabled) {
+            turret.failsafeParkCMD(RobotConstants.TURRET_FAILSAFE_SERVO_POS);
+        } else {
+            turret.aimAtTargetCMD(robotX, robotY, heading, robotVel, follower.getAngularVelocity(),
+                    aimGoalX(), aimGoalY());
+        }
         shooter.shooterSpinCMD(robotX, robotY, heading, robotVel,
                 shootingGoalX(), shootingGoalY(), intakeCommands.isTransferring());
 
@@ -105,7 +124,13 @@ public class Robot {
         // During transfer, if the robot needs to turn to face the goal,
         // override the driver's rotation input with an auto-correction
         double turnInput = -gamepad1.right_stick_x * 0.75;
-        if (intakeCommands.isTransferring() && turret.robotNeedToTurn()) {
+        if (robotAimEnabled) {
+            turnInput = calculateFailsafeHeadingTurn(robotX, robotY, heading, robotVel);
+        } else {
+            headingAimController.reset();
+            failsafeHeadingErrorRad = calculateFailsafeHeadingError(robotX, robotY, heading, robotVel);
+        }
+        if (!turretFailsafeEnabled && intakeCommands.isTransferring() && turret.robotNeedToTurn()) {
             // Determine turn direction from the turret's robot-relative angle:
             // positive angle → goal is to the left → turn CCW (positive turn)
             // negative angle → goal is to the right → turn CW (negative turn)
@@ -124,8 +149,6 @@ public class Robot {
 
         // ── Edge detection for toggle buttons ─────────────────────────────────
         boolean intakePressed    = gamepad1.right_bumper && !lastIntake;
-        boolean liftPressed      = gamepad1.y            && !lastLift;
-        boolean disengagePressed = gamepad1.left_bumper  && !lastDisengage;
         boolean resetCenterPressed = gamepad1.dpad_up && !lastPoseResetCenter;
         boolean resetStartPressed = gamepad1.dpad_down && !lastPoseResetStart;
 
@@ -155,30 +178,31 @@ public class Robot {
             intakeCommands.idle();
         }
 
-        // ── Lift commands ─────────────────────────────────────────────────────
-        if (liftPressed)      liftCommands.lift();
-        if (disengagePressed) liftCommands.disengage();
-
         // ── Save button states for next frame ─────────────────────────────────
         lastIntake    = gamepad1.right_bumper;
-        lastLift      = gamepad1.y;
-        lastDisengage = gamepad1.left_bumper;
+        lastFailsafeToggle = gamepad1.share;
+        lastRobotAimToggle = gamepad1.y;
         lastPoseResetCenter = gamepad1.dpad_up;
         lastPoseResetStart = gamepad1.dpad_down;
 
         // ── Command updates ───────────────────────────────────────────────────
+        boolean aimedAtTarget = turretFailsafeEnabled
+                ? robotAimEnabled && isFailsafeHeadingReady(robotX, robotY, heading, robotVel)
+                : !turret.robotNeedToTurn();
         intakeCommands.update(
                 robotX, robotY,
                 shooter.isReady(),
-                !turret.robotNeedToTurn()
+                aimedAtTarget
         );
-        liftCommands.update();
+
+        telemetry.addData("Turret failsafe", turretFailsafeEnabled);
+        telemetry.addData("Failsafe robot aim", robotAimEnabled);
+        telemetry.addData("Failsafe aim error deg", Math.toDegrees(failsafeHeadingErrorRad));
 
         // ── Subsystem updates ─────────────────────────────────────────────────
         intake.update();
         shooter.update();
         turret.update();
-        pto.update();
         PanelsDebug.update(follower, shooter, turret, intakeCommands.isTransferring());
     }
 
@@ -186,11 +210,61 @@ public class Robot {
     public Follower getFollower()    { return follower;        }
     public boolean  isBlueAlliance() { return isBlueAlliance;  }
 
+    private double calculateFailsafeHeadingTurn(double robotX, double robotY, double heading, Vector robotVel) {
+        failsafeHeadingErrorRad = calculateFailsafeHeadingError(robotX, robotY, heading, robotVel);
+        headingAimController.updateError(failsafeHeadingErrorRad);
+        return Range.clip(
+                headingAimController.run(),
+                -RobotConstants.TURRET_FAILSAFE_MAX_TURN_POWER,
+                RobotConstants.TURRET_FAILSAFE_MAX_TURN_POWER
+        );
+    }
+
+    private boolean isFailsafeHeadingReady(double robotX, double robotY, double heading, Vector robotVel) {
+        failsafeHeadingErrorRad = calculateFailsafeHeadingError(robotX, robotY, heading, robotVel);
+        return Math.abs(failsafeHeadingErrorRad) <= RobotConstants.TURRET_FAILSAFE_AIM_TOLERANCE_RAD;
+    }
+
+    private double calculateFailsafeHeadingError(double robotX, double robotY, double heading, Vector robotVel) {
+        double targetHeading = calculateFailsafeTargetHeading(robotX, robotY, heading, robotVel);
+        return normalizeAngle(targetHeading - heading);
+    }
+
+    private double calculateFailsafeTargetHeading(double robotX, double robotY, double heading, Vector robotVel) {
+        if (robotVel == null) {
+            robotVel = new Vector(0, 0);
+        }
+
+        double turretFieldX = robotX + TURRET_OFFSET_X * Math.cos(heading)
+                - TURRET_OFFSET_Y * Math.sin(heading);
+        double turretFieldY = robotY + TURRET_OFFSET_X * Math.sin(heading)
+                + TURRET_OFFSET_Y * Math.cos(heading);
+
+        double distance = Math.hypot(aimGoalX() - turretFieldX, aimGoalY() - turretFieldY);
+        double airtime = shooterEquation.getAirTime(distance);
+        double adjustedGoalX = aimGoalX() - robotVel.getXComponent() * airtime;
+        double adjustedGoalY = aimGoalY() - robotVel.getYComponent() * airtime;
+
+        double turretFieldTargetAngle = Math.atan2(
+                adjustedGoalY - turretFieldY,
+                adjustedGoalX - turretFieldX
+        );
+
+        return normalizeAngle(turretFieldTargetAngle + Math.PI
+                + RobotConstants.TURRET_FAILSAFE_HEADING_OFFSET_RAD);
+    }
+
     private void resetPose(Pose pose) {
         if (PoseStorage.isValid(pose)) {
             follower.setPose(pose);
             PoseStorage.setCurrentPose(pose);
         }
+    }
+
+    private static double normalizeAngle(double radians) {
+        while (radians > Math.PI) radians -= 2.0 * Math.PI;
+        while (radians < -Math.PI) radians += 2.0 * Math.PI;
+        return radians;
     }
 
     private double aimGoalX() {
