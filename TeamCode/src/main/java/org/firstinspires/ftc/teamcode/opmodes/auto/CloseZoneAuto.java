@@ -99,6 +99,10 @@ abstract class CloseZoneAuto extends OpMode {
         } else if (robot.isBusy() && autoState.elapsedMs() >= PATH_STEP_TIMEOUT_MS) {
             robot.forceIdle();
             startNextStep();
+        } else if (dryRun && dryRunStepWaitMs() > 0.0) {
+            if (autoState.elapsedMs() >= dryRunStepWaitMs()) {
+                startNextStep();
+            }
         } else if (!robot.isBusy()) {
             startNextStep();
         }
@@ -222,6 +226,21 @@ abstract class CloseZoneAuto extends OpMode {
     private void startFeedWhenShooterReady() {
         if (robot.isShooterReady() || autoState.elapsedMs() >= SHOOTER_WAIT_TIMEOUT_MS) {
             startNextStep();
+        }
+    }
+
+    private double dryRunStepWaitMs() {
+        switch (autoState.getStep()) {
+            case PRELOAD_FEED:
+                return CLOSE_PRELOAD_SHOOT_MS;
+            case MIDDLE_FEED:
+            case GATE_FEED:
+            case RIGHT_FEED:
+                return CLOSE_SHOOT_MS;
+            case GATE_CONFIRM_INTAKE:
+                return CLOSE_GATE_CONFIRM_INTAKE_MS;
+            default:
+                return 0.0;
         }
     }
 

@@ -80,7 +80,8 @@ abstract class FarAuto extends OpMode {
         robot.update();
 
         if (autoState.getStep() == AutoStep.PRELOAD_SPIN_UP) {
-            if (dryRun || (autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS && robot.isShooterReady())) {
+            if ((dryRun && autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS)
+                    || (autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS && robot.isShooterReady())) {
                 setStep(AutoStep.PRELOAD_SHOOT);
             } else if (autoState.elapsedMs() >= FAR_PRELOAD_SPIN_UP_MS + SHOOTER_WAIT_TIMEOUT_MS) {
                 setStep(AutoStep.PRELOAD_SHOOT);
@@ -90,6 +91,10 @@ abstract class FarAuto extends OpMode {
         } else if (robot.isBusy() && autoState.elapsedMs() >= PATH_STEP_TIMEOUT_MS) {
             robot.forceIdle();
             startNextStep();
+        } else if (dryRun && dryRunStepWaitMs() > 0.0) {
+            if (autoState.elapsedMs() >= dryRunStepWaitMs()) {
+                startNextStep();
+            }
         } else if (!robot.isBusy()) {
             startNextStep();
         }
@@ -250,6 +255,22 @@ abstract class FarAuto extends OpMode {
     private void startFeedWhenShooterReady() {
         if (robot.isShooterReady() || autoState.elapsedMs() >= SHOOTER_WAIT_TIMEOUT_MS) {
             startNextStep();
+        }
+    }
+
+    private double dryRunStepWaitMs() {
+        switch (autoState.getStep()) {
+            case PRELOAD_FEED:
+                return FAR_PRELOAD_SHOOT_MS;
+            case SPIKE_FEED:
+            case HUMAN_PLAYER_FEED:
+            case FLOW_1_FEED:
+            case FLOW_2_FEED:
+                return FAR_SHOOT_MS;
+            case HUMAN_PLAYER_CONFIRM_INTAKE:
+                return FAR_HUMAN_PLAYER_CONFIRM_INTAKE_MS;
+            default:
+                return 0.0;
         }
     }
 
