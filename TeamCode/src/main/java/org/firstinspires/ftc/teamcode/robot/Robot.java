@@ -13,6 +13,7 @@ import org.firstinspires.ftc.teamcode.commands.IntakeCommands;
 import org.firstinspires.ftc.teamcode.math.ShooterEquation;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSS;
+import org.firstinspires.ftc.teamcode.subsystems.LimelightLocalizerSS;
 import org.firstinspires.ftc.teamcode.subsystems.ShooterSS;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSS;
 
@@ -27,6 +28,7 @@ public class Robot {
     private final IntakeSS  intake;
     private final ShooterSS shooter;
     private final TurretSS  turret;
+    private final LimelightLocalizerSS limelightLocalizer;
     private final PIDFController headingAimController;
     private final ShooterEquation shooterEquation = new ShooterEquation();
 
@@ -48,12 +50,14 @@ public class Robot {
     private boolean lastIntake    = false;
     private boolean lastFailsafeToggle = false;
     private boolean lastRobotAimToggle = false;
+    private boolean lastLimelightRelocalize = false;
     private boolean lastPoseResetStart = false;
     private boolean lastPoseResetCenter = false;
     private boolean turretFailsafeEnabled = false;
     private boolean robotAimEnabled = false;
     private boolean isInTuning;
     private double failsafeHeadingErrorRad = 0.0;
+    private IntakeSS.BallState lastRumbledBallState = IntakeSS.BallState.EMPTY;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     public Robot(HardwareMap hwm, Telemetry telemetry, boolean isBlueAlliance, boolean tuning) {
@@ -67,6 +71,7 @@ public class Robot {
         intake  = new IntakeSS(hwm, telemetry, "intake1", "intake2", "gate", "led1");
         shooter = new ShooterSS(hwm, telemetry, "shooter1", "shooter2", "hood", "led2");
         turret  = new TurretSS(hwm, telemetry, "turret1", "turret2");
+        limelightLocalizer = new LimelightLocalizerSS(hwm, telemetry);
 
         intakeCommands = new IntakeCommands(intake);
 
@@ -145,6 +150,15 @@ public class Robot {
                 Math.toRadians(headingOffset)
         );
         follower.update();
+
+        boolean limelightRelocalizePressed = gamepad1.a && !lastLimelightRelocalize;
+        limelightLocalizer.updateRobotOrientation(follower.getPose());
+        if (limelightRelocalizePressed) {
+            limelightLocalizer.setInstantReset(true);
+            limelightLocalizer.relocalizeNow(follower);
+        } else {
+            limelightLocalizer.relocalizeIfDue(follower);
+        }
         PoseStorage.setCurrentPose(follower.getPose());
 
         // ── Edge detection for toggle buttons ─────────────────────────────────
@@ -180,6 +194,7 @@ public class Robot {
 
         // ── Save button states for next frame ─────────────────────────────────
         lastIntake    = gamepad1.right_bumper;
+        lastLimelightRelocalize = gamepad1.a;
         lastFailsafeToggle = gamepad1.share;
         lastRobotAimToggle = gamepad1.y;
         lastPoseResetCenter = gamepad1.dpad_up;
@@ -194,10 +209,12 @@ public class Robot {
                 shooter.isReady(),
                 aimedAtTarget
         );
+        rumbleOnBallDetected(gamepad1);
 
         telemetry.addData("Turret failsafe", turretFailsafeEnabled);
         telemetry.addData("Failsafe robot aim", robotAimEnabled);
         telemetry.addData("Failsafe aim error deg", Math.toDegrees(failsafeHeadingErrorRad));
+        limelightLocalizer.telemetry();
 
         // ── Subsystem updates ─────────────────────────────────────────────────
         intake.update();
@@ -218,6 +235,18 @@ public class Robot {
                 -RobotConstants.TURRET_FAILSAFE_MAX_TURN_POWER,
                 RobotConstants.TURRET_FAILSAFE_MAX_TURN_POWER
         );
+    }
+
+    private void rumbleOnBallDetected(Gamepad gamepad1) {
+        IntakeSS.BallState ballState = intakeCommands.getBallState();
+        if (intakeCommands.isIntaking() && ballState != lastRumbledBallState) {
+            if (ballState == IntakeSS.BallState.ONE) {
+                gamepad1.rumble(0.45, 0.45, 200);
+            } else if (ballState == IntakeSS.BallState.FULL) {
+                gamepad1.rumble(1.0, 1.0, 350);
+            }
+        }
+        lastRumbledBallState = ballState;
     }
 
     private boolean isFailsafeHeadingReady(double robotX, double robotY, double heading, Vector robotVel) {

@@ -24,6 +24,8 @@ public class RobotConstants {
     public static final String TURRET_SERVO_1 = "turret1";
     public static final String TURRET_SERVO_2 = "turret2";
 
+    public static final String LIMELIGHT_NAME = "limelight";
+
     // Multiplies teleop drive input. Raise for faster driver control.
     public static final double DRIVE_SPEED_MULTIPLIER = 1.25;
     // Auto-turn power used while transferring if the turret is outside safe range.
@@ -36,6 +38,23 @@ public class RobotConstants {
     public static double TURRET_FAILSAFE_AIM_TOLERANCE_RAD = Math.toRadians(2.0);
     // Tune this if the fixed turret fail-safe position is not perfectly aligned with robot heading.
     public static double TURRET_FAILSAFE_HEADING_OFFSET_RAD = 0.0;
+
+    // Limelight relocalization. Keep the filters conservative until the field map is proven.
+    public static boolean LIMELIGHT_RELOCALIZATION_ENABLED = true;
+    public static boolean LIMELIGHT_APPLY_POSE_UPDATES = false;
+    public static boolean LIMELIGHT_USE_MEGATAG2 = true;
+    public static int LIMELIGHT_PIPELINE = 0;
+    public static int LIMELIGHT_POLL_RATE_HZ = 50;
+    public static double LIMELIGHT_RELOCALIZE_INTERVAL_MS = 10000.0;
+    public static double LIMELIGHT_MAX_STALENESS_MS = 250.0;
+    public static double LIMELIGHT_MAX_POSITION_STDDEV_IN = 18.0;
+    public static double LIMELIGHT_MAX_HEADING_STDDEV_DEG = 25.0;
+    public static double LIMELIGHT_MAX_CORRECTION_IN = 24.0;
+    public static double LIMELIGHT_MAX_RELOCALIZE_SPEED_IN_PER_SEC = 8.0;
+    public static double LIMELIGHT_MAX_RELOCALIZE_TURN_DEG_PER_SEC = 30.0;
+    public static double LIMELIGHT_X_OFFSET_IN = 0.0;
+    public static double LIMELIGHT_Y_OFFSET_IN = 0.0;
+    public static double LIMELIGHT_HEADING_OFFSET_RAD = 0.0;
 
     // Default red start pose if an opmode uses constants instead of saved pose.
     public static final double START_X_RED = 8.25;

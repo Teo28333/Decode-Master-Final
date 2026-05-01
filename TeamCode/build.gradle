@@ -45,11 +45,6 @@ dependencies {
     implementation project(':FtcRobotController')
     annotationProcessor files('lib/OpModeAnnotationProcessor.jar')
 
-    // SolversLib: Latest Stable Version
-
-    implementation "org.solverslib:core:0.3.4" // core
-    implementation "org.solverslib:pedroPathing:0.3.4" // pedroPathing
-
     implementation "com.acmerobotics.dashboard:dashboard:0.5.1" // FTC Dashboard
 
     // Pedro Pathing

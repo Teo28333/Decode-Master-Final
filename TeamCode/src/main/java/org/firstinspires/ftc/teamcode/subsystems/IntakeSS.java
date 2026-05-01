@@ -21,6 +21,7 @@ public class IntakeSS {
     private final ElapsedTime motor2Timer  = new ElapsedTime();
     private final ElapsedTime gateFailsafe = new ElapsedTime();
     private final ElapsedTime transferJamTimer = new ElapsedTime();
+    private final ElapsedTime transferAimSettleTimer = new ElapsedTime();
 
     // ── Sensor readings ───────────────────────────────────────────────────────
     private double motor1Current = 0.0;
@@ -38,6 +39,8 @@ public class IntakeSS {
     private boolean needToTurn    = false;
     private boolean isIntaking = false;
     private boolean isTransferring = false;
+    private boolean transferWaitedForAim = false;
+    private boolean transferAimSettleStarted = false;
     private boolean ignoreShootingZoneCheck = false;
     private boolean ignoreAimCheck = false;
     private BallState ballState = BallState.EMPTY;
@@ -162,6 +165,8 @@ public class IntakeSS {
 
         resetIntake();
         ballState = BallState.EMPTY;
+        transferWaitedForAim = false;
+        transferAimSettleStarted = false;
         firstMotorPow  = outtakeSpeed;
         secondMotorPow = outtakeSpeed;
     }
@@ -175,6 +180,9 @@ public class IntakeSS {
             resetIntake();
             gateFailsafe.reset();
             transferJamTimer.reset();
+            transferAimSettleTimer.reset();
+            transferWaitedForAim = false;
+            transferAimSettleStarted = false;
             transferState = TransferState.WAITING_GATE;
             isTransferring = true;
         }
@@ -187,6 +195,12 @@ public class IntakeSS {
             return;
         }
 
+        if (ready && !canAim) {
+            transferWaitedForAim = true;
+            transferAimSettleStarted = false;
+            transferAimSettleTimer.reset();
+        }
+
         if (!ready || !canAim || !isInShootingZone(x, y)
                 || gateFailsafe.milliseconds() < gateSettleTime) {
             firstMotorPow  = 0.0;
@@ -196,6 +210,22 @@ public class IntakeSS {
                     ? TransferState.WAITING_GATE
                     : TransferState.WAITING_READY;
             return;
+        }
+
+        if (transferWaitedForAim) {
+            if (!transferAimSettleStarted) {
+                transferAimSettleStarted = true;
+                transferAimSettleTimer.reset();
+            }
+            if (transferAimSettleTimer.milliseconds() < transferAimSettleTime) {
+                firstMotorPow = 0.0;
+                secondMotorPow = 0.0;
+                transferJamTimer.reset();
+                transferState = TransferState.WAITING_READY;
+                return;
+            }
+            transferWaitedForAim = false;
+            transferAimSettleStarted = false;
         }
 
         if (motor1Current > transferJamCurrentThreshold
@@ -224,6 +254,8 @@ public class IntakeSS {
         isIntaking = false;
         isTransferring = false;
         needToTurn     = false;
+        transferWaitedForAim = false;
+        transferAimSettleStarted = false;
         transferState  = TransferState.IDLE;
     }
 
@@ -231,7 +263,10 @@ public class IntakeSS {
         motor1Stopped = false;
         motor2Stopped = false;
         ballState = BallState.EMPTY;
+        transferWaitedForAim = false;
+        transferAimSettleStarted = false;
         transferJamTimer.reset();
+        transferAimSettleTimer.reset();
         motor1Timer.reset();
         motor2Timer.reset();
     }

@@ -12,6 +12,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.commands.IntakeCommands;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSS;
+import org.firstinspires.ftc.teamcode.subsystems.LimelightLocalizerSS;
 import org.firstinspires.ftc.teamcode.subsystems.ShooterSS;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSS;
 
@@ -22,6 +23,7 @@ public class RobotAuton {
     public final IntakeSS  intake;
     public final ShooterSS shooter;
     public final TurretSS  turret;
+    public final LimelightLocalizerSS limelightLocalizer;
 
     // ── Commands ──────────────────────────────────────────────────────────────
     public final IntakeCommands intakeCommands;
@@ -58,6 +60,7 @@ public class RobotAuton {
         intake  = new IntakeSS(hwm, telemetry, "intake1", "intake2", "gate", "led1");
         shooter = new ShooterSS(hwm, telemetry, "shooter1", "shooter2", "hood", "led2");
         turret  = new TurretSS(hwm, telemetry, "turret1", "turret2");
+        limelightLocalizer = new LimelightLocalizerSS(hwm, telemetry);
 
         intakeCommands = new IntakeCommands(intake);
         intake.setIgnoreShootingZoneCheck(true);
@@ -77,6 +80,8 @@ public class RobotAuton {
     // ── Main auton loop ───────────────────────────────────────────────────────
     public void update() {
         follower.update();
+        limelightLocalizer.updateRobotOrientation(follower.getPose());
+        limelightLocalizer.relocalizeIfDue(follower);
 
         // ── Pose & velocity ───────────────────────────────────────────────────
         Pose   pose       = follower.getPose();
@@ -148,6 +153,7 @@ public class RobotAuton {
         intake.update();
         shooter.update();
         turret.update();
+        limelightLocalizer.telemetry();
         PanelsDebug.update(follower, shooter, turret, intakeCommands.isTransferring());
         savePose();
     }

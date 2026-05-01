@@ -27,6 +27,8 @@ public class IntakeConstants {
     public static double transferJamCurrentThreshold = 3700;
     // How long jam current must persist before transfer latches JAMMED.
     public static double transferJamTime = 750;
+    // Wait after robot aim recovers before feeding, if transfer was waiting on aim.
+    public static double transferAimSettleTime = 500;
 
     // Servo position for gate open during transfer/outtake.
     public static double openGatePos = 0.5;
