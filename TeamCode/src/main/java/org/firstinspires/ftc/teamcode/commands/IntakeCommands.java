@@ -66,6 +66,15 @@ public class IntakeCommands {
     public IntakeSS.BallState getBallState() { return intake.getBallState();   }
     public IntakeSS.TransferState getTransferState() { return intake.getTransferState(); }
     public boolean isFull() { return intake.isFull(); }
+    public String getState() {
+        if (currentMode == Mode.TRANSFERRING) {
+            return currentMode + " / " + intake.getTransferState();
+        }
+        if (currentMode == Mode.INTAKING) {
+            return currentMode + " / " + intake.getBallState();
+        }
+        return currentMode.toString();
+    }
 
     private void setMode(Mode mode) {
         currentMode = mode;

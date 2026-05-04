@@ -256,6 +256,10 @@ public class LimelightLocalizerSS {
         telemetry.addData("Limelight robot turn dps", "%.1f", lastAngularVelocityDegPerSec);
     }
 
+    public Pose getLastVisionPose() {
+        return lastVisionPose;
+    }
+
     private static double normalizeAngle(double radians) {
         while (radians > Math.PI) radians -= 2.0 * Math.PI;
         while (radians < -Math.PI) radians += 2.0 * Math.PI;

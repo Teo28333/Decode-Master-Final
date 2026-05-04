@@ -36,7 +36,10 @@ public class ShooterSS {
     private double hoodDrop = 0.0;
     private double currentDistance = 0.0;
 
+    private boolean inShootingZone = false;
     private boolean tuningMode = false;
+
+    private static final double ZONE_DIAGONAL = 10 * Math.sqrt(2);
 
     public ShooterSS(HardwareMap hwm, Telemetry telemetry,
                      String shooterMotor1, String shooterMotor2,
@@ -75,6 +78,14 @@ public class ShooterSS {
         telemetry();
     }
 
+    public void update(boolean showTelemetry) {
+        read();
+        write();
+        if (showTelemetry) {
+            telemetry();
+        }
+    }
+
     public void telemetry() {
         telemetry.addData("Shooter target (RPM)", targetRPM);
         telemetry.addData("Shooter corrected target (RPM)", correctedTargetRPM);
@@ -86,6 +97,7 @@ public class ShooterSS {
         telemetry.addData("Hood position", hoodPos);
         telemetry.addData("Distance (in)", currentDistance);
         telemetry.addData("At target", atTarget());
+        telemetry.addData("In shooting zone", inShootingZone);
         telemetry.addData("Tuning mode", tuningMode);
     }
 
@@ -108,6 +120,7 @@ public class ShooterSS {
         double adjDistance = Math.hypot(adjGoalX - robotX, adjGoalY - robotY);
 
         currentDistance = adjDistance;
+        inShootingZone = isInShootingZone(robotX, robotY);
 
         targetRPM = tuningMode ? tuningRPM : shooterEquation.getTargetRPM(adjDistance);
         double baseHoodPos = tuningMode ? tuningHoodPos : shooterEquation.getHoodPos(adjDistance);
@@ -123,7 +136,7 @@ public class ShooterSS {
         hoodPos = Math.max(0.5, baseHoodPos - hoodDrop);
 
         motorPow = pidfsController.calculate(correctedTargetRPM, currentVelRPM);
-        ledColor = atTarget() ? 0.5 : 0.39;
+        ledColor = inShootingZone ? 0.5 : 0.0;
     }
 
     public void setTuningMode(boolean enabled) {
@@ -153,6 +166,18 @@ public class ShooterSS {
     private boolean atTarget() {
         return currentVelRPM > targetRPM - RPM_THRESHOLD
                 && currentVelRPM < targetRPM + RPM_THRESHOLD / 3.0;
+    }
+
+    private boolean isInShootingZone(double x, double y) {
+        return isInBackZone(x, y) || isInFrontZone(x, y);
+    }
+
+    private boolean isInBackZone(double x, double y) {
+        return y <= x - 48 + ZONE_DIAGONAL && y <= -x + 96 + ZONE_DIAGONAL;
+    }
+
+    private boolean isInFrontZone(double x, double y) {
+        return y >= -x + 144 - ZONE_DIAGONAL && y >= x - ZONE_DIAGONAL;
     }
 
     private static double tpsToRPM(double tps) {

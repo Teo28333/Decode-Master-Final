@@ -186,7 +186,7 @@ public class Robot {
         }
 
         // ── Transfer (active while left bumper held) ───────────────────────────
-        if (gamepad1.x) {
+        if (gamepad1.left_bumper) {
             if (!intakeCommands.isTransferring()) intakeCommands.transfer();
         } else if (intakeCommands.isTransferring()) {
             intakeCommands.idle();
@@ -204,6 +204,7 @@ public class Robot {
         boolean aimedAtTarget = turretFailsafeEnabled
                 ? robotAimEnabled && isFailsafeHeadingReady(robotX, robotY, heading, robotVel)
                 : !turret.robotNeedToTurn();
+        intake.read();
         intakeCommands.update(
                 robotX, robotY,
                 shooter.isReady(),
@@ -211,21 +212,39 @@ public class Robot {
         );
         rumbleOnBallDetected(gamepad1);
 
-        telemetry.addData("Turret failsafe", turretFailsafeEnabled);
-        telemetry.addData("Failsafe robot aim", robotAimEnabled);
-        telemetry.addData("Failsafe aim error deg", Math.toDegrees(failsafeHeadingErrorRad));
-        limelightLocalizer.telemetry();
-
         // ── Subsystem updates ─────────────────────────────────────────────────
-        intake.update();
-        shooter.update();
-        turret.update();
+        intake.update(false);
+        shooter.update(false);
+        turret.update(false);
+        teleopTelemetry();
         PanelsDebug.update(follower, shooter, turret, intakeCommands.isTransferring());
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
     public Follower getFollower()    { return follower;        }
     public boolean  isBlueAlliance() { return isBlueAlliance;  }
+
+    private void teleopTelemetry() {
+        Pose robotPose = follower.getPose();
+        Pose limelightPose = limelightLocalizer.getLastVisionPose();
+
+        telemetry.addData("Robot position", "%.1f, %.1f, %.1f",
+                robotPose.getX(),
+                robotPose.getY(),
+                Math.toDegrees(robotPose.getHeading()));
+        if (limelightPose != null) {
+            telemetry.addData("Limelight pose", "%.1f, %.1f, %.1f",
+                    limelightPose.getX(),
+                    limelightPose.getY(),
+                    Math.toDegrees(limelightPose.getHeading()));
+        } else {
+            telemetry.addData("Limelight pose", "none");
+        }
+        telemetry.addData("Intake state", intakeCommands.getState());
+        telemetry.addData("Shooter at target", shooter.isReady());
+        telemetry.addData("Turret failsafe", turretFailsafeEnabled);
+        telemetry.addData("Turret target field deg", "%.1f", turret.getTargetAngleFieldDeg());
+    }
 
     private double calculateFailsafeHeadingTurn(double robotX, double robotY, double heading, Vector robotVel) {
         failsafeHeadingErrorRad = calculateFailsafeHeadingError(robotX, robotY, heading, robotVel);
@@ -239,13 +258,21 @@ public class Robot {
 
     private void rumbleOnBallDetected(Gamepad gamepad1) {
         IntakeSS.BallState ballState = intakeCommands.getBallState();
-        if (intakeCommands.isIntaking() && ballState != lastRumbledBallState) {
-            if (ballState == IntakeSS.BallState.ONE) {
-                gamepad1.rumble(0.45, 0.45, 200);
-            } else if (ballState == IntakeSS.BallState.FULL) {
-                gamepad1.rumble(1.0, 1.0, 350);
-            }
+        if (!intakeCommands.isIntaking()) {
+            lastRumbledBallState = IntakeSS.BallState.EMPTY;
+            return;
         }
+
+        if (ballState == lastRumbledBallState) {
+            return;
+        }
+
+        if (ballState == IntakeSS.BallState.ONE) {
+            gamepad1.rumble(0.45, 0.45, 200);
+        } else if (ballState == IntakeSS.BallState.FULL) {
+            gamepad1.rumble(1.0, 1.0, 350);
+        }
+
         lastRumbledBallState = ballState;
     }
 

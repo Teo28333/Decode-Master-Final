@@ -31,7 +31,7 @@ public class RobotConstants {
     // Auto-turn power used while transferring if the turret is outside safe range.
     public static final double TURN_CORRECTION_POWER = 0.4;
     // Servo position used when the turret fail-safe is enabled.
-    public static double TURRET_FAILSAFE_SERVO_POS = 0.0;
+    public static double TURRET_FAILSAFE_SERVO_POS = 0.5;
     // Max robot turn command while aiming with robot heading in turret fail-safe.
     public static double TURRET_FAILSAFE_MAX_TURN_POWER = 0.55;
     // Heading error allowed before transfer considers fail-safe robot aim ready.

@@ -64,6 +64,14 @@ public class TurretSS {
         telemetry();
     }
 
+    public void update(boolean showTelemetry) {
+        read();
+        write();
+        if (showTelemetry) {
+            telemetry();
+        }
+    }
+
     public void telemetry() {
         telemetry.addData("Turret target (deg, field)", Math.toDegrees(targetAngleRad));
         telemetry.addData("Turret target (deg, robot)", Math.toDegrees(actualTargetAngleRad));
@@ -160,6 +168,10 @@ public class TurretSS {
     // ── Helpers ───────────────────────────────────────────────────────────────
     public double getServoPos() {
         return servoPos;
+    }
+
+    public double getTargetAngleFieldDeg() {
+        return Math.toDegrees(targetAngleRad);
     }
 
     private double angleDegToServoPos(double angleDeg) {

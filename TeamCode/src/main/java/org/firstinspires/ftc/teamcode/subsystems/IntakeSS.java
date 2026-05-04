@@ -113,6 +113,14 @@ public class IntakeSS {
         telemetry();
     }
 
+    public void update(boolean showTelemetry) {
+        read();
+        write();
+        if (showTelemetry) {
+            telemetry();
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     public void intakeCMD() {
