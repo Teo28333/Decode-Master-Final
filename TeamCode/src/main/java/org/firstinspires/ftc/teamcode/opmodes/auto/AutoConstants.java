@@ -15,7 +15,7 @@ public class AutoConstants {
     public static double FAR_PRELOAD_SPIN_UP_MS = 2250.0;
     public static double FAR_PRELOAD_SHOOT_MS = 1000.0;
     public static double FAR_SHOOT_MS = 1000.0;
-    public static double FAR_HUMAN_PLAYER_CONFIRM_INTAKE_MS = 1000.0;
+    public static double FAR_HUMAN_PLAYER_CONFIRM_INTAKE_MS = 2000.0;
     public static double FAR_RETURN_INTAKE_MS = 250.0;
 
     public static double PATH_STEP_TIMEOUT_MS = 4500.0;
@@ -24,6 +24,6 @@ public class AutoConstants {
     public static double SOLO_PRELOAD_SPIN_UP_MS = 2250.0;
     public static double SOLO_PRELOAD_SHOOT_MS = 1000.0;
     public static double SOLO_SHOOT_MS = 1000.0;
-    public static double SOLO_HUMAN_PLAYER_CONFIRM_INTAKE_MS = 1000.0;
+    public static double SOLO_HUMAN_PLAYER_CONFIRM_INTAKE_MS = 250.0;
     public static double SOLO_RETURN_INTAKE_MS = 250.0;
 }

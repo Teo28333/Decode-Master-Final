@@ -16,15 +16,17 @@ public class TurretConstants {
     public static double TURRET_OFFSET_Y = 0.0;
 
     // Angular velocity smoothing. Higher is smoother but lags more.
-    public static double HEADING_VEL_FILTER_ALPHA = 0.8;
+    public static double HEADING_VEL_FILTER_ALPHA = 0.7;
     // Predicts robot heading this far ahead to compensate turning while shooting.
-    public static double HEADING_VEL_LOOKAHEAD_SEC = 0.375;
+    public static double HEADING_VEL_LOOKAHEAD_SEC = 0.2;
     // Linear velocity smoothing for shoot-on-the-move aim lead.
-    public static double VELOCITY_FILTER_ALPHA = 0.375;
+    public static double VELOCITY_FILTER_ALPHA = 0.35;
     // Target angle smoothing. Lower reacts faster; higher reduces twitch.
-    public static double TARGET_ANGLE_FILTER_ALPHA = 0.25;
+    public static double TARGET_ANGLE_FILTER_ALPHA = 0.2;
     // Servo command smoothing. Lower moves faster; higher is smoother.
-    public static double SERVO_FILTER_ALPHA = 0.05;
+    public static double SERVO_FILTER_ALPHA = 0.0;
+    // Maximum servo command change per loop.
+    public static double SERVO_MAX_STEP = 0.08;
     // Ignore tiny servo command changes smaller than this.
-    public static double SERVO_DEADBAND = 0.0015;
+    public static double SERVO_DEADBAND = 0.001;
 }

@@ -14,8 +14,8 @@ abstract class CloseZoneAuto extends OpMode {
     private RobotAuton robot;
     private Paths paths;
     private final AutoStateMachine<AutoStep> autoState = new AutoStateMachine<>(AutoStep.GO_TO_SHOOTING_POSE);
-    private int selectedGateIntakes = CLOSE_DEFAULT_GATE_INTAKES;
-    private int gateIntakeCycle = 0;
+    private int selectedGateIntakeShootCycles = CLOSE_DEFAULT_GATE_INTAKES;
+    private int gateIntakeShootCycle = 0;
     private boolean dryRun = false;
     private boolean lastDpadUp = false;
     private boolean lastDpadDown = false;
@@ -25,6 +25,10 @@ abstract class CloseZoneAuto extends OpMode {
         GO_TO_SHOOTING_POSE,
         PRELOAD_SHOOT,
         PRELOAD_FEED,
+        LEFT_INTAKE,
+        LEFT_RETURN,
+        LEFT_SHOOT,
+        LEFT_FEED,
         MIDDLE_INTAKE,
         MIDDLE_RETURN,
         MIDDLE_SHOOT,
@@ -34,11 +38,6 @@ abstract class CloseZoneAuto extends OpMode {
         GATE_RETURN,
         GATE_SHOOT,
         GATE_FEED,
-        RIGHT_INTAKE,
-        RIGHT_RETURN,
-        RIGHT_SHOOT,
-        RIGHT_FEED,
-        LEAVING_ZONE,
         DONE
     }
 
@@ -48,7 +47,7 @@ abstract class CloseZoneAuto extends OpMode {
     public void init() {
         robot = new RobotAuton(hardwareMap, telemetry, isBlueAlliance());
         paths = new Paths();
-        robot.start(alliancePose(new Pose(18.603, 120.278, Math.toRadians(-40))));
+        robot.start(alliancePose(new Pose(18.571, 117.403, Math.toRadians(-36))));
 
         telemetry.addLine(opModeName() + " ready");
         telemetry.update();
@@ -61,10 +60,10 @@ abstract class CloseZoneAuto extends OpMode {
         boolean xPressed = gamepad1.x && !lastX;
 
         if (dpadUpPressed) {
-            selectedGateIntakes = Math.min(CLOSE_MAX_GATE_INTAKES, selectedGateIntakes + 1);
+            selectedGateIntakeShootCycles = clampGateIntakeShootCycles(selectedGateIntakeShootCycles + 1);
         }
         if (dpadDownPressed) {
-            selectedGateIntakes = Math.max(CLOSE_MIN_GATE_INTAKES, selectedGateIntakes - 1);
+            selectedGateIntakeShootCycles = clampGateIntakeShootCycles(selectedGateIntakeShootCycles - 1);
         }
         if (xPressed) {
             dryRun = !dryRun;
@@ -76,7 +75,7 @@ abstract class CloseZoneAuto extends OpMode {
 
         telemetry.addLine(opModeName() + " ready");
         telemetry.addData("Step", autoState.getStep());
-        telemetry.addData("Gate intakes", selectedGateIntakes);
+        telemetry.addData("Gate intake+shoot chains", selectedGateIntakeShootCycles);
         telemetry.addData("Dry run", dryRun);
         telemetry.addData("Path timeout ms", PATH_STEP_TIMEOUT_MS);
         telemetry.addData("Shooter timeout ms", SHOOTER_WAIT_TIMEOUT_MS);
@@ -86,8 +85,9 @@ abstract class CloseZoneAuto extends OpMode {
     @Override
     public void start() {
         autoState.setStep(AutoStep.GO_TO_SHOOTING_POSE);
-        gateIntakeCycle = 0;
-        robot.followPath(paths.goToShootingPose);
+        selectedGateIntakeShootCycles = clampGateIntakeShootCycles(selectedGateIntakeShootCycles);
+        gateIntakeShootCycle = 0;
+        robot.followPath(paths.closezone);
     }
 
     @Override
@@ -112,7 +112,7 @@ abstract class CloseZoneAuto extends OpMode {
         telemetry.addData("Step", autoState.getStep());
         telemetry.addData("Step time ms", "%.0f", autoState.elapsedMs());
         telemetry.addData("Path progress %%", "%.1f", robot.getPathProgressPercent());
-        telemetry.addData("Gate intake cycle", "%d / %d", gateIntakeCycle, selectedGateIntakes);
+        telemetry.addData("Gate intake+shoot chain", "%d / %d", gateIntakeShootCycle, selectedGateIntakeShootCycles);
         telemetry.addData("Dry run", dryRun);
         telemetry.addData("Pose", "%.1f, %.1f, %.1f", pose.getX(), pose.getY(), Math.toDegrees(pose.getHeading()));
         telemetry.update();
@@ -134,13 +134,31 @@ abstract class CloseZoneAuto extends OpMode {
                 break;
 
             case PRELOAD_FEED:
+                setStep(AutoStep.LEFT_INTAKE);
+                followIntakePath(paths.leftIntake);
+                break;
+
+            case LEFT_INTAKE:
+                setStep(AutoStep.LEFT_RETURN);
+                followReturnPath(paths.leftReturn);
+                break;
+
+            case LEFT_RETURN:
+                setStep(AutoStep.LEFT_SHOOT);
+                break;
+
+            case LEFT_SHOOT:
+                startTransfer(AutoStep.LEFT_FEED, CLOSE_SHOOT_MS);
+                break;
+
+            case LEFT_FEED:
                 setStep(AutoStep.MIDDLE_INTAKE);
-                followIntakePath(paths.intakeMiddleLine);
+                followIntakePath(paths.middleIntake);
                 break;
 
             case MIDDLE_INTAKE:
                 setStep(AutoStep.MIDDLE_RETURN);
-                followReturnPath(paths.goToShootingPose2);
+                followReturnPath(paths.middleReturn);
                 break;
 
             case MIDDLE_RETURN:
@@ -152,9 +170,8 @@ abstract class CloseZoneAuto extends OpMode {
                 break;
 
             case MIDDLE_FEED:
-                setStep(AutoStep.GATE_INTAKE);
-                gateIntakeCycle = 1;
-                followIntakePath(paths.gateIntake1);
+                gateIntakeShootCycle = 0;
+                startNextGateIntakeShootCycle();
                 break;
 
             case GATE_INTAKE:
@@ -164,7 +181,7 @@ abstract class CloseZoneAuto extends OpMode {
 
             case GATE_CONFIRM_INTAKE:
                 setStep(AutoStep.GATE_RETURN);
-                followReturnPath(paths.goToShootingPose3);
+                followReturnPath(paths.gateReturn);
                 break;
 
             case GATE_RETURN:
@@ -176,35 +193,9 @@ abstract class CloseZoneAuto extends OpMode {
                 break;
 
             case GATE_FEED:
-                if (gateIntakeCycle < selectedGateIntakes) {
-                    gateIntakeCycle++;
-                    setStep(AutoStep.GATE_INTAKE);
-                    followIntakePath(paths.gateIntake1);
-                } else {
-                    setStep(AutoStep.RIGHT_INTAKE);
-                    followIntakePath(paths.intakeRightLine);
-                }
+                startNextGateIntakeShootCycle();
                 break;
 
-            case RIGHT_INTAKE:
-                setStep(AutoStep.RIGHT_RETURN);
-                followReturnPath(paths.goToShootingPose4);
-                break;
-
-            case RIGHT_RETURN:
-                setStep(AutoStep.RIGHT_SHOOT);
-                break;
-
-            case RIGHT_SHOOT:
-                startTransfer(AutoStep.RIGHT_FEED, CLOSE_SHOOT_MS);
-                break;
-
-            case RIGHT_FEED:
-                setStep(AutoStep.LEAVING_ZONE);
-                robot.followPath(paths.leavingZone);
-                break;
-
-            case LEAVING_ZONE:
             case DONE:
             default:
                 setStep(AutoStep.DONE);
@@ -218,9 +209,9 @@ abstract class CloseZoneAuto extends OpMode {
         }
 
         return autoState.getStep() == AutoStep.PRELOAD_SHOOT
+                || autoState.getStep() == AutoStep.LEFT_SHOOT
                 || autoState.getStep() == AutoStep.MIDDLE_SHOOT
-                || autoState.getStep() == AutoStep.GATE_SHOOT
-                || autoState.getStep() == AutoStep.RIGHT_SHOOT;
+                || autoState.getStep() == AutoStep.GATE_SHOOT;
     }
 
     private void startFeedWhenShooterReady() {
@@ -229,13 +220,24 @@ abstract class CloseZoneAuto extends OpMode {
         }
     }
 
+    private void startNextGateIntakeShootCycle() {
+        if (gateIntakeShootCycle >= selectedGateIntakeShootCycles) {
+            setStep(AutoStep.DONE);
+            return;
+        }
+
+        gateIntakeShootCycle++;
+        setStep(AutoStep.GATE_INTAKE);
+        followIntakePath(paths.gateIntake);
+    }
+
     private double dryRunStepWaitMs() {
         switch (autoState.getStep()) {
             case PRELOAD_FEED:
                 return CLOSE_PRELOAD_SHOOT_MS;
+            case LEFT_FEED:
             case MIDDLE_FEED:
             case GATE_FEED:
-            case RIGHT_FEED:
                 return CLOSE_SHOOT_MS;
             case GATE_CONFIRM_INTAKE:
                 return CLOSE_GATE_CONFIRM_INTAKE_MS;
@@ -246,6 +248,14 @@ abstract class CloseZoneAuto extends OpMode {
 
     private Pose alliancePose(Pose bluePose) {
         return AllianceUtil.mirrorForAlliance(bluePose, isBlueAlliance());
+    }
+
+    private double allianceHeading(double blueHeading) {
+        return isBlueAlliance() ? blueHeading : Math.PI - blueHeading;
+    }
+
+    private int clampGateIntakeShootCycles(int cycles) {
+        return Math.max(CLOSE_MIN_GATE_INTAKES, Math.min(CLOSE_MAX_GATE_INTAKES, cycles));
     }
 
     private void setStep(AutoStep step) {
@@ -286,101 +296,97 @@ abstract class CloseZoneAuto extends OpMode {
     }
 
     private class Paths {
-        private final PathChain goToShootingPose;
-        private final PathChain intakeMiddleLine;
-        private final PathChain goToShootingPose2;
-        private final PathChain gateIntake1;
-        private final PathChain goToShootingPose3;
-        private final PathChain intakeRightLine;
-        private final PathChain goToShootingPose4;
-        private final PathChain leavingZone;
+        private final PathChain closezone;
+        private final PathChain leftIntake;
+        private final PathChain leftReturn;
+        private final PathChain middleIntake;
+        private final PathChain middleReturn;
+        private final PathChain gateIntake;
+        private final PathChain gateReturn;
 
         private Paths() {
-            goToShootingPose = robot.getFollower().pathBuilder()
-                    .addPath(
-                            new BezierCurve(
-                                    alliancePose(new Pose(18.603, 120.278, Math.toRadians(-40))),
-                                    alliancePose(new Pose(42.478, 102.949)),
-                                    alliancePose(new Pose(50.751, 81.026))
-                            )
-                    )
-                    .setTangentHeadingInterpolation()
-                    .build();
-
-            intakeMiddleLine = robot.getFollower().pathBuilder()
-                    .addPath(
-                            new BezierCurve(
-                                    alliancePose(new Pose(50.751, 81.026)),
-                                    alliancePose(new Pose(45.598, 62.729)),
-                                    alliancePose(new Pose(11.874, 57.405))
-                            )
-                    )
-                    .setTangentHeadingInterpolation()
-                    .build();
-
-            goToShootingPose2 = robot.getFollower().pathBuilder()
+            closezone = robot.getFollower().pathBuilder()
                     .addPath(
                             new BezierLine(
-                                    alliancePose(new Pose(11.874, 57.405)),
-                                    alliancePose(new Pose(50.213, 81.026))
+                                    alliancePose(new Pose(18.571, 117.403)),
+                                    alliancePose(new Pose(40.000, 95.000))
+                            )
+                    )
+                    .setLinearHeadingInterpolation(
+                            allianceHeading(Math.toRadians(-36)),
+                            allianceHeading(Math.toRadians(180))
+                    )
+                    .build();
+
+            leftIntake = robot.getFollower().pathBuilder()
+                    .addPath(
+                            new BezierLine(
+                                    alliancePose(new Pose(40.000, 95.000)),
+                                    alliancePose(new Pose(19.000, 78.000))
+                            )
+                    )
+                    .setTangentHeadingInterpolation()
+                    .build();
+
+            leftReturn = robot.getFollower().pathBuilder()
+                    .addPath(
+                            new BezierLine(
+                                    alliancePose(new Pose(19.000, 78.000)),
+                                    alliancePose(new Pose(47.000, 82.000))
                             )
                     )
                     .setTangentHeadingInterpolation()
                     .setReversed()
                     .build();
 
-            gateIntake1 = robot.getFollower().pathBuilder()
+            middleIntake = robot.getFollower().pathBuilder()
                     .addPath(
                             new BezierCurve(
-                                    alliancePose(new Pose(50.213, 81.026)),
-                                    alliancePose(new Pose(35.615, 48.126)),
-                                    alliancePose(new Pose(11.469, 60.767))
+                                    alliancePose(new Pose(47.000, 82.000)),
+                                    alliancePose(new Pose(38.404, 63.738)),
+                                    alliancePose(new Pose(16.296, 53.967))
                             )
                     )
                     .setTangentHeadingInterpolation()
                     .build();
 
-            goToShootingPose3 = robot.getFollower().pathBuilder()
+            middleReturn = robot.getFollower().pathBuilder()
                     .addPath(
-                            new BezierCurve(
-                                    alliancePose(new Pose(11.469, 60.767)),
-                                    alliancePose(new Pose(20.194, 54.924)),
-                                    alliancePose(new Pose(50.565, 81.026))
+                            new BezierLine(
+                                    alliancePose(new Pose(16.296, 53.967)),
+                                    alliancePose(new Pose(49.000, 84.000))
                             )
                     )
                     .setTangentHeadingInterpolation()
                     .setReversed()
                     .build();
 
-            intakeRightLine = robot.getFollower().pathBuilder()
+            gateIntake = robot.getFollower().pathBuilder()
                     .addPath(
-                            new BezierLine(
-                                    alliancePose(new Pose(50.565, 81.026)),
-                                    alliancePose(new Pose(18.493, 83.650))
+                            new BezierCurve(
+                                    alliancePose(new Pose(49.000, 84.000)),
+                                    alliancePose(new Pose(26.477, 60.234)),
+                                    alliancePose(new Pose(10.622, 56.370))
                             )
                     )
-                    .setTangentHeadingInterpolation()
+                    .setLinearHeadingInterpolation(
+                            allianceHeading(Math.toRadians(223)),
+                            allianceHeading(Math.toRadians(150))
+                    )
                     .build();
 
-            goToShootingPose4 = robot.getFollower().pathBuilder()
+            gateReturn = robot.getFollower().pathBuilder()
                     .addPath(
                             new BezierLine(
-                                    alliancePose(new Pose(18.493, 83.650)),
-                                    alliancePose(new Pose(31.409, 100.447))
+                                    alliancePose(new Pose(10.622, 56.370)),
+                                    alliancePose(new Pose(47.000, 82.000))
                             )
                     )
-                    .setTangentHeadingInterpolation()
+                    .setLinearHeadingInterpolation(
+                            allianceHeading(Math.toRadians(150)),
+                            allianceHeading(Math.toRadians(223))
+                    )
                     .setReversed()
-                    .build();
-
-            leavingZone = robot.getFollower().pathBuilder()
-                    .addPath(
-                            new BezierLine(
-                                    alliancePose(new Pose(31.409, 100.447)),
-                                    alliancePose(new Pose(21.911, 71.509))
-                            )
-                    )
-                    .setTangentHeadingInterpolation()
                     .build();
         }
     }

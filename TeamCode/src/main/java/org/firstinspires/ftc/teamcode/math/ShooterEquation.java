@@ -6,7 +6,7 @@ public class ShooterEquation {
                 + 0.00518183   * Math.pow(distance, 3)
                 - 0.846593     * Math.pow(distance, 2)
                 + 73.04495     * distance
-                + 550.72007;
+                + 500.72007;
     }
 
     public double getHoodPos(double distance) {

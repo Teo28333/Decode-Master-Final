@@ -21,7 +21,6 @@ public class IntakeSS {
     private final ElapsedTime motor2Timer  = new ElapsedTime();
     private final ElapsedTime gateFailsafe = new ElapsedTime();
     private final ElapsedTime transferJamTimer = new ElapsedTime();
-    private final ElapsedTime transferAimSettleTimer = new ElapsedTime();
 
     // ── Sensor readings ───────────────────────────────────────────────────────
     private double motor1Current = 0.0;
@@ -30,7 +29,7 @@ public class IntakeSS {
     // ── Outputs ───────────────────────────────────────────────────────────────
     private double firstMotorPow  = 0.0;
     private double secondMotorPow = 0.0;
-    private double gatePos        = 0.0;
+    private double gatePos        = closeGatePos;
     private double ledColor       = 0.3;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -39,8 +38,8 @@ public class IntakeSS {
     private boolean needToTurn    = false;
     private boolean isIntaking = false;
     private boolean isTransferring = false;
-    private boolean transferWaitedForAim = false;
-    private boolean transferAimSettleStarted = false;
+    private boolean gateClosingForIntake = false;
+    private boolean gateOpeningForTransfer = false;
     private boolean ignoreShootingZoneCheck = false;
     private boolean ignoreAimCheck = false;
     private BallState ballState = BallState.EMPTY;
@@ -78,8 +77,8 @@ public class IntakeSS {
         intake2.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         gate = hwm.get(Servo.class, gateServo);
-
-        gate.setPosition(closeGatePos);
+        gatePos = closeGatePos;
+        gate.setPosition(gatePos);
 
         led = hwm.get(ServoImplEx.class, led1);
         led.setPwmRange(new PwmControl.PwmRange(500, 2500));
@@ -105,6 +104,7 @@ public class IntakeSS {
         telemetry.addData("Motor 2 stopped",      motor2Stopped);
         telemetry.addData("Intake ball state",    ballState);
         telemetry.addData("Transfer state",       transferState);
+        telemetry.addData("Gate position",        gatePos);
     }
 
     public void update() {
@@ -117,10 +117,15 @@ public class IntakeSS {
 
     public void intakeCMD() {
         if (!isIntaking) {
-            gateFailsafe.reset();
+            gateClosingForIntake = false;
         }
         isIntaking = true;
         isTransferring = false;
+        if (!gateClosingForIntake || gatePos != closeGatePos) {
+            gateFailsafe.reset();
+            gateClosingForIntake = true;
+        }
+        gateOpeningForTransfer = false;
         transferState = TransferState.IDLE;
         gatePos = closeGatePos;
 
@@ -148,7 +153,7 @@ public class IntakeSS {
         updateBallState();
 
         // Power output
-        secondMotorPow = motor2Stopped ? 0.0 : intakeSpeed;
+        secondMotorPow = motor2Stopped ? 0.0 : secondIntakeSpeed;
         firstMotorPow  = motor1Stopped ? 0.0 : intakeSpeed;
 
         // LED feedback
@@ -160,13 +165,13 @@ public class IntakeSS {
     public void outtakeCMD() {
         isIntaking = false;
         isTransferring = false;
+        gateClosingForIntake = false;
+        gateOpeningForTransfer = false;
         transferState = TransferState.IDLE;
         gatePos = openGatePos;
 
         resetIntake();
         ballState = BallState.EMPTY;
-        transferWaitedForAim = false;
-        transferAimSettleStarted = false;
         firstMotorPow  = outtakeSpeed;
         secondMotorPow = outtakeSpeed;
     }
@@ -178,27 +183,23 @@ public class IntakeSS {
 
         if (!isTransferring) {
             resetIntake();
-            gateFailsafe.reset();
             transferJamTimer.reset();
-            transferAimSettleTimer.reset();
-            transferWaitedForAim = false;
-            transferAimSettleStarted = false;
             transferState = TransferState.WAITING_GATE;
             isTransferring = true;
+            gateClosingForIntake = false;
+            gateOpeningForTransfer = false;
         }
 
-        gatePos        = openGatePos;
+        if (!gateOpeningForTransfer || gatePos != openGatePos) {
+            gateFailsafe.reset();
+            gateOpeningForTransfer = true;
+        }
+        gatePos = openGatePos;
 
         if (transferState == TransferState.JAMMED) {
             firstMotorPow = 0.0;
             secondMotorPow = 0.0;
             return;
-        }
-
-        if (ready && !canAim) {
-            transferWaitedForAim = true;
-            transferAimSettleStarted = false;
-            transferAimSettleTimer.reset();
         }
 
         if (!ready || !canAim || !isInShootingZone(x, y)
@@ -210,22 +211,6 @@ public class IntakeSS {
                     ? TransferState.WAITING_GATE
                     : TransferState.WAITING_READY;
             return;
-        }
-
-        if (transferWaitedForAim) {
-            if (!transferAimSettleStarted) {
-                transferAimSettleStarted = true;
-                transferAimSettleTimer.reset();
-            }
-            if (transferAimSettleTimer.milliseconds() < transferAimSettleTime) {
-                firstMotorPow = 0.0;
-                secondMotorPow = 0.0;
-                transferJamTimer.reset();
-                transferState = TransferState.WAITING_READY;
-                return;
-            }
-            transferWaitedForAim = false;
-            transferAimSettleStarted = false;
         }
 
         if (motor1Current > transferJamCurrentThreshold
@@ -246,16 +231,17 @@ public class IntakeSS {
         transferState = TransferState.FEEDING;
     }
 
-    /** Stop all motors and return LED to idle. Does NOT change gate position. */
+    /** Stop all motors, close the gate, and return LED to idle. */
     public void stop() {
         firstMotorPow  = 0.0;
         secondMotorPow = 0.0;
+        gatePos        = closeGatePos;
         ledColor       = LED_IDLE;
         isIntaking = false;
         isTransferring = false;
+        gateClosingForIntake = false;
+        gateOpeningForTransfer = false;
         needToTurn     = false;
-        transferWaitedForAim = false;
-        transferAimSettleStarted = false;
         transferState  = TransferState.IDLE;
     }
 
@@ -263,10 +249,9 @@ public class IntakeSS {
         motor1Stopped = false;
         motor2Stopped = false;
         ballState = BallState.EMPTY;
-        transferWaitedForAim = false;
-        transferAimSettleStarted = false;
+        gateClosingForIntake = false;
+        gateOpeningForTransfer = false;
         transferJamTimer.reset();
-        transferAimSettleTimer.reset();
         motor1Timer.reset();
         motor2Timer.reset();
     }

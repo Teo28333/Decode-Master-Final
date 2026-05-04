@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.opmodes.auto;
 
 import static org.firstinspires.ftc.teamcode.opmodes.auto.AutoConstants.*;
 
-import com.pedropathing.follower.Follower;
 import com.pedropathing.geometry.BezierCurve;
 import com.pedropathing.geometry.BezierLine;
 import com.pedropathing.geometry.Pose;
@@ -23,24 +22,25 @@ abstract class SoloAuto extends OpMode {
         PRELOAD_SPIN_UP,
         PRELOAD_SHOOT,
         PRELOAD_FEED,
-        BOTTOM_INTAKE,
-        BOTTOM_RETURN,
-        BOTTOM_SHOOT,
-        BOTTOM_FEED,
-        MIDDLE_INTAKE,
-        MIDDLE_RETURN,
-        MIDDLE_SHOOT,
-        MIDDLE_FEED,
-        TOP_INTAKE,
-        TOP_SWEEP,
-        TOP_RETURN,
-        TOP_SHOOT,
-        TOP_FEED,
-        FAR_INTAKE,
-        FAR_CONFIRM_INTAKE,
-        FAR_RETURN,
-        FAR_SHOOT,
-        FAR_FEED,
+        GO_TO_HUMAN_ZONE,
+        INTAKE_HUMAN_ZONE,
+        HUMAN_ZONE_CONFIRM_INTAKE,
+        GO_TO_SHOOT_FROM_HUMAN_ZONE,
+        HUMAN_ZONE_SHOOT,
+        HUMAN_ZONE_FEED,
+        INTAKE_LEFT_LINE,
+        GO_TO_SHOOT_FROM_LEFT_LINE,
+        LEFT_LINE_SHOOT,
+        LEFT_LINE_FEED,
+        INTAKE_MIDDLE_LINE,
+        CLEAR_CLASSIFIER,
+        GO_TO_SHOOT_FROM_MIDDLE_LINE,
+        MIDDLE_LINE_SHOOT,
+        MIDDLE_LINE_FEED,
+        INTAKE_RIGHT_LINE,
+        GO_TO_SHOOT_FROM_RIGHT_LINE,
+        RIGHT_LINE_SHOOT,
+        RIGHT_LINE_FEED,
         DONE
     }
 
@@ -50,7 +50,7 @@ abstract class SoloAuto extends OpMode {
     public void init() {
         robot = new RobotAuton(hardwareMap, telemetry, isBlueAlliance());
         paths = new Paths();
-        robot.start(alliancePose(new Pose(56.000, 8.500, Math.toRadians(180))));
+        robot.start(alliancePose(new Pose(56.000, 8.500, Math.toRadians(150))));
 
         telemetry.addLine(opModeName() + " ready");
         telemetry.update();
@@ -122,88 +122,93 @@ abstract class SoloAuto extends OpMode {
                 break;
 
             case PRELOAD_FEED:
-                setStep(AutoStep.BOTTOM_INTAKE);
-                followIntakePath(paths.bottomIntake);
+                setStep(AutoStep.GO_TO_HUMAN_ZONE);
+                robot.followPath(paths.goToHumanZone);
                 break;
 
-            case BOTTOM_INTAKE:
-                setStep(AutoStep.BOTTOM_RETURN);
-                followReturnPath(paths.bottomReturn);
+            case GO_TO_HUMAN_ZONE:
+                setStep(AutoStep.INTAKE_HUMAN_ZONE);
+                followIntakePath(paths.intakeHumanZone);
                 break;
 
-            case BOTTOM_RETURN:
-                setStep(AutoStep.BOTTOM_SHOOT);
-                break;
-
-            case BOTTOM_SHOOT:
-                startTransfer(AutoStep.BOTTOM_FEED, SOLO_SHOOT_MS);
-                break;
-
-            case BOTTOM_FEED:
-                setStep(AutoStep.MIDDLE_INTAKE);
-                followIntakePath(paths.middleIntake);
-                break;
-
-            case MIDDLE_INTAKE:
-                setStep(AutoStep.MIDDLE_RETURN);
-                followReturnPath(paths.middleReturn);
-                break;
-
-            case MIDDLE_RETURN:
-                setStep(AutoStep.MIDDLE_SHOOT);
-                break;
-
-            case MIDDLE_SHOOT:
-                startTransfer(AutoStep.MIDDLE_FEED, SOLO_SHOOT_MS);
-                break;
-
-            case MIDDLE_FEED:
-                setStep(AutoStep.TOP_INTAKE);
-                followIntakePath(paths.topIntake);
-                break;
-
-            case TOP_INTAKE:
-                setStep(AutoStep.TOP_SWEEP);
-                followIntakePath(paths.topSweep);
-                break;
-
-            case TOP_SWEEP:
-                setStep(AutoStep.TOP_RETURN);
-                followReturnPath(paths.topReturn);
-                break;
-
-            case TOP_RETURN:
-                setStep(AutoStep.TOP_SHOOT);
-                break;
-
-            case TOP_SHOOT:
-                startTransfer(AutoStep.TOP_FEED, SOLO_SHOOT_MS);
-                break;
-
-            case TOP_FEED:
-                setStep(AutoStep.FAR_INTAKE);
-                followIntakePath(paths.farIntake);
-                break;
-
-            case FAR_INTAKE:
-                setStep(AutoStep.FAR_CONFIRM_INTAKE);
+            case INTAKE_HUMAN_ZONE:
+                setStep(AutoStep.HUMAN_ZONE_CONFIRM_INTAKE);
                 intakeFor(SOLO_HUMAN_PLAYER_CONFIRM_INTAKE_MS);
                 break;
 
-            case FAR_CONFIRM_INTAKE:
-                setStep(AutoStep.FAR_RETURN);
-                followReturnPath(paths.farReturn);
+            case HUMAN_ZONE_CONFIRM_INTAKE:
+                setStep(AutoStep.GO_TO_SHOOT_FROM_HUMAN_ZONE);
+                followReturnPath(paths.goToShootFromHumanZone);
                 break;
 
-            case FAR_RETURN:
-                setStep(AutoStep.FAR_SHOOT);
+            case GO_TO_SHOOT_FROM_HUMAN_ZONE:
+                setStep(AutoStep.HUMAN_ZONE_SHOOT);
                 break;
 
-            case FAR_SHOOT:
-                startTransfer(AutoStep.FAR_FEED, SOLO_SHOOT_MS);
+            case HUMAN_ZONE_SHOOT:
+                startTransfer(AutoStep.HUMAN_ZONE_FEED, SOLO_SHOOT_MS);
                 break;
 
-            case FAR_FEED:
+            case HUMAN_ZONE_FEED:
+                setStep(AutoStep.INTAKE_LEFT_LINE);
+                followIntakePath(paths.intakeLeftLine);
+                break;
+
+            case INTAKE_LEFT_LINE:
+                setStep(AutoStep.GO_TO_SHOOT_FROM_LEFT_LINE);
+                followReturnPath(paths.goToShootFromLeftLine);
+                break;
+
+            case GO_TO_SHOOT_FROM_LEFT_LINE:
+                setStep(AutoStep.LEFT_LINE_SHOOT);
+                break;
+
+            case LEFT_LINE_SHOOT:
+                startTransfer(AutoStep.LEFT_LINE_FEED, SOLO_SHOOT_MS);
+                break;
+
+            case LEFT_LINE_FEED:
+                setStep(AutoStep.INTAKE_MIDDLE_LINE);
+                followIntakePath(paths.intakeMiddleLine);
+                break;
+
+            case INTAKE_MIDDLE_LINE:
+                setStep(AutoStep.CLEAR_CLASSIFIER);
+                followIntakePath(paths.clearClassifier);
+                break;
+
+            case CLEAR_CLASSIFIER:
+                setStep(AutoStep.GO_TO_SHOOT_FROM_MIDDLE_LINE);
+                followReturnPath(paths.goToShootFromMiddleLine);
+                break;
+
+            case GO_TO_SHOOT_FROM_MIDDLE_LINE:
+                setStep(AutoStep.MIDDLE_LINE_SHOOT);
+                break;
+
+            case MIDDLE_LINE_SHOOT:
+                startTransfer(AutoStep.MIDDLE_LINE_FEED, SOLO_SHOOT_MS);
+                break;
+
+            case MIDDLE_LINE_FEED:
+                setStep(AutoStep.INTAKE_RIGHT_LINE);
+                followIntakePath(paths.intakeRightLine);
+                break;
+
+            case INTAKE_RIGHT_LINE:
+                setStep(AutoStep.GO_TO_SHOOT_FROM_RIGHT_LINE);
+                followReturnPath(paths.goToShootFromRightLine);
+                break;
+
+            case GO_TO_SHOOT_FROM_RIGHT_LINE:
+                setStep(AutoStep.RIGHT_LINE_SHOOT);
+                break;
+
+            case RIGHT_LINE_SHOOT:
+                startTransfer(AutoStep.RIGHT_LINE_FEED, SOLO_SHOOT_MS);
+                break;
+
+            case RIGHT_LINE_FEED:
             case DONE:
             default:
                 setStep(AutoStep.DONE);
@@ -217,10 +222,10 @@ abstract class SoloAuto extends OpMode {
         }
 
         return autoState.getStep() == AutoStep.PRELOAD_SHOOT
-                || autoState.getStep() == AutoStep.BOTTOM_SHOOT
-                || autoState.getStep() == AutoStep.MIDDLE_SHOOT
-                || autoState.getStep() == AutoStep.TOP_SHOOT
-                || autoState.getStep() == AutoStep.FAR_SHOOT;
+                || autoState.getStep() == AutoStep.HUMAN_ZONE_SHOOT
+                || autoState.getStep() == AutoStep.LEFT_LINE_SHOOT
+                || autoState.getStep() == AutoStep.MIDDLE_LINE_SHOOT
+                || autoState.getStep() == AutoStep.RIGHT_LINE_SHOOT;
     }
 
     private void startFeedWhenShooterReady() {
@@ -233,12 +238,12 @@ abstract class SoloAuto extends OpMode {
         switch (autoState.getStep()) {
             case PRELOAD_FEED:
                 return SOLO_PRELOAD_SHOOT_MS;
-            case BOTTOM_FEED:
-            case MIDDLE_FEED:
-            case TOP_FEED:
-            case FAR_FEED:
+            case HUMAN_ZONE_FEED:
+            case LEFT_LINE_FEED:
+            case MIDDLE_LINE_FEED:
+            case RIGHT_LINE_FEED:
                 return SOLO_SHOOT_MS;
-            case FAR_CONFIRM_INTAKE:
+            case HUMAN_ZONE_CONFIRM_INTAKE:
                 return SOLO_HUMAN_PLAYER_CONFIRM_INTAKE_MS;
             default:
                 return 0.0;
@@ -291,58 +296,81 @@ abstract class SoloAuto extends OpMode {
     }
 
     private class Paths {
-        private final PathChain bottomIntake;
-        private final PathChain bottomReturn;
-        private final PathChain middleIntake;
-        private final PathChain middleReturn;
-        private final PathChain topIntake;
-        private final PathChain topSweep;
-        private final PathChain topReturn;
-        private final PathChain farIntake;
-        private final PathChain farReturn;
+        private final PathChain goToHumanZone;
+        private final PathChain intakeHumanZone;
+        private final PathChain goToShootFromHumanZone;
+        private final PathChain intakeLeftLine;
+        private final PathChain goToShootFromLeftLine;
+        private final PathChain intakeMiddleLine;
+        private final PathChain clearClassifier;
+        private final PathChain goToShootFromMiddleLine;
+        private final PathChain intakeRightLine;
+        private final PathChain goToShootFromRightLine;
 
         private Paths() {
-            bottomIntake = tangentCurve(
-                    new Pose(56.000, 8.500, Math.toRadians(180)),
-                    new Pose(35.979, 16.565),
-                    new Pose(9.706, 11.041),
+            goToHumanZone = robot.getFollower().pathBuilder()
+                    .addPath(
+                            new BezierLine(
+                                    alliancePose(new Pose(56.000, 8.500)),
+                                    alliancePose(new Pose(9.000, 25.000))
+                            )
+                    )
+                    .setLinearHeadingInterpolation(
+                            allianceHeading(Math.toRadians(150)),
+                            allianceHeading(Math.toRadians(270))
+                    )
+                    .setReversed()
+                    .build();
+
+            intakeHumanZone = robot.getFollower().pathBuilder()
+                    .addPath(
+                            new BezierLine(
+                                    alliancePose(new Pose(9.000, 25.000)),
+                                    alliancePose(new Pose(9.000, 10.000))
+                            )
+                    )
+                    .setTangentHeadingInterpolation()
+                    .build();
+
+            goToShootFromHumanZone = linearHeadingLine(
+                    new Pose(9.000, 10.000),
+                    new Pose(49.445, 13.872),
+                    Math.toRadians(270),
+                    Math.toRadians(100),
                     false
             );
-            bottomReturn = tangentLine(new Pose(9.706, 11.041), new Pose(49.150, 12.957), true);
-            middleIntake = tangentCurve(
-                    new Pose(49.150, 12.957),
-                    new Pose(46.584, 34.619),
-                    new Pose(10.204, 34.945),
+
+            intakeLeftLine = tangentCurve(
+                    new Pose(49.445, 13.872),
+                    new Pose(45.219, 34.889),
+                    new Pose(14.000, 36.000),
                     false
             );
-            middleReturn = tangentLine(new Pose(10.204, 34.945), new Pose(49.373, 13.177), true);
-            topIntake = tangentCurve(
-                    new Pose(49.373, 13.177),
-                    new Pose(48.048, 57.618),
-                    new Pose(16.179, 58.530),
+            goToShootFromLeftLine = tangentLine(new Pose(14.000, 36.000), new Pose(49.363, 13.810), true);
+            intakeMiddleLine = tangentCurve(
+                    new Pose(49.363, 13.810),
+                    new Pose(41.217, 60.900),
+                    new Pose(13.573, 59.041),
                     false
             );
-            topSweep = linearHeadingCurve(
-                    new Pose(16.179, 58.530),
-                    new Pose(24.575, 63.396),
-                    new Pose(16.089, 68.034),
+            clearClassifier = linearHeadingCurve(
+                    new Pose(13.573, 59.041),
+                    new Pose(21.318, 59.861),
+                    new Pose(14.168, 68.544),
                     Math.toRadians(180),
-                    Math.toRadians(90)
-            );
-            topReturn = linearHeadingCurve(
-                    new Pose(16.089, 68.034),
-                    new Pose(45.326, 68.953),
-                    new Pose(47.177, 80.389),
-                    Math.toRadians(90),
-                    Math.toRadians(180)
-            );
-            farIntake = tangentLine(new Pose(47.177, 80.389), new Pose(20.236, 82.382), false);
-            farReturn = tangentCurve(
-                    new Pose(20.236, 82.382),
-                    new Pose(38.189, 93.970),
-                    new Pose(40.455, 124.491),
+                    Math.toRadians(-90),
                     true
             );
+            goToShootFromMiddleLine = linearHeadingCurve(
+                    new Pose(14.168, 68.544),
+                    new Pose(41.209, 58.996),
+                    new Pose(47.000, 82.000),
+                    Math.toRadians(-90),
+                    Math.toRadians(180),
+                    true
+            );
+            intakeRightLine = tangentLine(new Pose(47.000, 82.000), new Pose(15.000, 82.000), false);
+            goToShootFromRightLine = tangentLine(new Pose(15.000, 82.000), new Pose(47.000, 82.000), true);
         }
     }
 
@@ -374,10 +402,27 @@ abstract class SoloAuto extends OpMode {
         return builder.build();
     }
 
+    private PathChain linearHeadingLine(Pose blueStart, Pose blueEnd,
+                                        double blueStartHeading, double blueEndHeading,
+                                        boolean reversed) {
+        PathBuilder builder = robot.getFollower().pathBuilder()
+                .addPath(new BezierLine(alliancePose(blueStart), alliancePose(blueEnd)))
+                .setLinearHeadingInterpolation(
+                        allianceHeading(blueStartHeading),
+                        allianceHeading(blueEndHeading)
+                );
+
+        if (reversed) {
+            builder = builder.setReversed();
+        }
+
+        return builder.build();
+    }
+
     private PathChain linearHeadingCurve(Pose blueStart, Pose blueControl, Pose blueEnd,
-                                         double blueStartHeading, double blueEndHeading) {
-        Follower follower = robot.getFollower();
-        return follower.pathBuilder()
+                                         double blueStartHeading, double blueEndHeading,
+                                         boolean reversed) {
+        PathBuilder builder = robot.getFollower().pathBuilder()
                 .addPath(new BezierCurve(
                         alliancePose(blueStart),
                         alliancePose(blueControl),
@@ -386,7 +431,12 @@ abstract class SoloAuto extends OpMode {
                 .setLinearHeadingInterpolation(
                         allianceHeading(blueStartHeading),
                         allianceHeading(blueEndHeading)
-                )
-                .build();
+                );
+
+        if (reversed) {
+            builder = builder.setReversed();
+        }
+
+        return builder.build();
     }
 }

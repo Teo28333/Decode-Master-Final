@@ -96,14 +96,11 @@ public class TurretSS {
         }
 
         // ── Angular velocity filter ───────────────────────────────────────────
-        filteredHeadingVel = HEADING_VEL_FILTER_ALPHA * filteredHeadingVel
-                + (1.0 - HEADING_VEL_FILTER_ALPHA) * robotHeadingVel;
+        filteredHeadingVel = robotHeadingVel;
 
         // ── Linear velocity filter ────────────────────────────────────────────
-        filteredVelX = VELOCITY_FILTER_ALPHA * filteredVelX
-                + (1.0 - VELOCITY_FILTER_ALPHA) * robotVel.getXComponent();
-        filteredVelY = VELOCITY_FILTER_ALPHA * filteredVelY
-                + (1.0 - VELOCITY_FILTER_ALPHA) * robotVel.getYComponent();
+        filteredVelX = robotVel.getXComponent();
+        filteredVelY = robotVel.getYComponent();
 
         // ── Turret pivot position on field ────────────────────────────────────
         turretFieldX = robotX + TURRET_OFFSET_X * Math.cos(robotHeading)
@@ -119,7 +116,7 @@ public class TurretSS {
 
         // ── Field-relative angle from turret pivot to goal ────────────────────
         targetAngleRad = Math.atan2(adjGoalY - turretFieldY, adjGoalX - turretFieldX);
-        filteredTargetAngleRad = smoothAngle(filteredTargetAngleRad, targetAngleRad);
+        filteredTargetAngleRad = targetAngleRad;
 
         // ── Convert to robot-relative with heading prediction ─────────────────
         // Lead the heading by lookahead × angular velocity to compensate
@@ -134,10 +131,8 @@ public class TurretSS {
         // ── Servo output (CW+, so negate CCW+ math angle) ─────────────────────
         double targetDeg = -Math.toDegrees(actualTargetAngleRad);
         double targetServoPos = angleDegToServoPos(targetDeg);
-        double smoothedServoPos = SERVO_FILTER_ALPHA * servoPos
-                + (1.0 - SERVO_FILTER_ALPHA) * targetServoPos;
-        if (Math.abs(smoothedServoPos - servoPos) > SERVO_DEADBAND) {
-            servoPos = smoothedServoPos;
+        if (Math.abs(targetServoPos - servoPos) > SERVO_DEADBAND) {
+            servoPos = targetServoPos;
         }
         robotNeedToTurn  = targetDeg > maxSafeAngleDeg || targetDeg < minSafeAngleDeg;
     }
